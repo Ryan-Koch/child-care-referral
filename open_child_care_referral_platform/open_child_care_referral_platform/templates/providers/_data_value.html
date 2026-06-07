@@ -1,0 +1,25 @@
+{% load provider_extras %}
+{% if value|is_mapping %}
+  <dl class="row mb-0 small">
+    {% for key, item in value.items %}
+      <dt class="col-sm-4 fw-semibold text-muted">{{ key }}</dt>
+      <dd class="col-sm-8 mb-1">
+        {% include "providers/_data_value.html" with value=item %}
+      </dd>
+    {% endfor %}
+  </dl>
+{% elif value|is_sequence %}
+  {% if value %}
+    <ul class="list-unstyled mb-0">
+      {% for item in value %}
+        <li class="mb-1">
+          {% include "providers/_data_value.html" with value=item %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <span class="text-muted">—</span>
+  {% endif %}
+{% else %}
+  {{ value|default_if_none:"—" }}
+{% endif %}

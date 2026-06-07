@@ -1,4 +1,5 @@
 from django.db import models
+from django.urls import reverse
 from model_utils.models import TimeStampedModel
 
 
@@ -49,6 +50,9 @@ class Provider(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.provider_name or f"Provider #{self.pk}"
+
+    def get_absolute_url(self) -> str:
+        return reverse("providers:detail", kwargs={"pk": self.pk})
 
 
 class Inspection(TimeStampedModel):
