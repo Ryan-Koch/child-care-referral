@@ -4,6 +4,38 @@
   <h1 class="h3 mb-0">Providers</h1>
   <span class="text-muted">{{ paginator.count }} total</span>
 </div>
+<form method="get" class="card card-body shadow-sm mb-4">
+  <div class="row g-3 align-items-end">
+    <div class="col-sm-5">
+      <label for="state-select" class="form-label mb-1">State</label>
+      <select id="state-select"
+              name="state"
+              class="form-select"
+              onchange="this.form.county.value='';this.form.submit()">
+        <option value="">All states</option>
+        {% for state in states %}
+        <option value="{{ state }}" {% if state == selected_state %}selected{% endif %}>{{ state }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-5">
+      <label for="county-select" class="form-label mb-1">County</label>
+      <select id="county-select"
+              name="county"
+              class="form-select"
+              onchange="this.form.submit()"
+              {% if not counties %}disabled{% endif %}>
+        <option value="">All counties</option>
+        {% for county in counties %}
+        <option value="{{ county }}" {% if county == selected_county %}selected{% endif %}>{{ county }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-2">
+      <button type="submit" class="btn btn-primary w-100">Search</button>
+    </div>
+  </div>
+</form>
 <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
   {% for provider in providers %}
   <div class="col">
@@ -95,7 +127,11 @@
   </div>
   {% empty %}
   <div class="col-12">
+    {% if selected_state or selected_county %}
+    <p class="text-muted">No providers match your search.</p>
+    {% else %}
     <p class="text-muted">No providers have been loaded yet.</p>
+    {% endif %}
   </div>
   {% endfor %}
 </div>
@@ -104,9 +140,8 @@
   <ul class="pagination justify-content-center">
     {% if page_obj.has_previous %}
     <li class="page-item">
-      <a class="page-link" href="?page={{ page_obj.previous_page_number }}"
-        >Previous</a
-      >
+      <a class="page-link"
+         href="{% querystring page=page_obj.previous_page_number %}">Previous</a>
     </li>
     {% else %}
     <li class="page-item disabled">
@@ -120,7 +155,8 @@
     </li>
     {% if page_obj.has_next %}
     <li class="page-item">
-      <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+      <a class="page-link"
+         href="{% querystring page=page_obj.next_page_number %}">Next</a>
     </li>
     {% else %}
     <li class="page-item disabled">

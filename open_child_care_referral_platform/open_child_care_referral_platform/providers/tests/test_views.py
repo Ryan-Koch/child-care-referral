@@ -62,3 +62,51 @@ def test_detail_renders_nested_state_data_and_inspections(client, provider):
     # Inspection and its own state_data are shown too.
     assert "Annual Review" in content
     assert "sc_alert_count" in content
+
+
+@pytest.fixture
+def two_county_providers(db):
+    Provider.objects.create(
+        provider_name="Richland Place",
+        source_state="South Carolina",
+        county="Richland",
+    )
+    Provider.objects.create(
+        provider_name="Chesterfield Place",
+        source_state="South Carolina",
+        county="Chesterfield",
+    )
+
+
+@pytest.mark.django_db
+def test_counties_populate_only_after_state_selected(client, two_county_providers):
+    # No state chosen: state options exist, but counties are withheld.
+    unfiltered = client.get(reverse("providers:list"))
+    assert unfiltered.context["states"] == ["South Carolina"]
+    assert unfiltered.context["counties"] == []
+
+    # State chosen: its distinct counties are offered, sorted.
+    filtered = client.get(reverse("providers:list"), {"state": "South Carolina"})
+    assert filtered.context["counties"] == ["Chesterfield", "Richland"]
+
+
+@pytest.mark.django_db
+def test_county_filter_limits_results(client, two_county_providers):
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "South Carolina", "county": "Richland"},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Richland Place"]
+
+
+@pytest.mark.django_db
+def test_county_from_another_state_is_ignored(client, two_county_providers):
+    # A county that is not in the selected state must not filter anything out.
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "South Carolina", "county": "Nonexistent"},
+    )
+
+    assert response.context["paginator"].count == Provider.objects.count()
