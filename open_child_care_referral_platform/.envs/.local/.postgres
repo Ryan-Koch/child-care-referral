@@ -1,0 +1,7 @@
+# PostgreSQL
+# ------------------------------------------------------------------------------
+POSTGRES_HOST=postgres
+POSTGRES_PORT=5432
+POSTGRES_DB=open_child_care_referral_platform
+POSTGRES_USER=ArmqonReYJwhVoOpRZLNGobHBKbGYMUr
+POSTGRES_PASSWORD=bnLtiyHtIYJ1Mjm1XxMjxmTiBsDLSPTXZSAO7tUAJ9SfdmOhYq0YSjhEMZmWEqXF

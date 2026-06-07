@@ -1,0 +1,17 @@
+services:
+  docs:
+    image: open_child_care_referral_platform_local_docs
+    container_name: open_child_care_referral_platform_local_docs
+    build:
+      context: .
+      dockerfile: ./compose/local/docs/Dockerfile
+    env_file:
+      - ./.envs/.local/.django
+    volumes:
+      - /app/.venv
+      - ./docs:/docs:z
+      - ./config:/app/config:z
+      - ./open_child_care_referral_platform:/app/open_child_care_referral_platform:z
+    ports:
+      - '9000:9000'
+    command: /start-docs
