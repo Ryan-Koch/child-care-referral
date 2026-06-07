@@ -18,6 +18,8 @@ urlpatterns = [
     # User management
     path("users/", include("open_child_care_referral_platform.users.urls", namespace="users")),
     path("accounts/", include("allauth.urls")),
+    # Provider directory
+    path("providers/", include("open_child_care_referral_platform.providers.urls", namespace="providers")),
     # Your stuff: custom urls includes go here
     # ...
     # Media files
