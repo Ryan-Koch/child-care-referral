@@ -40,6 +40,39 @@ UNLICENSED_RECORD = {
     "inspections": [],
 }
 
+# Virginia: real license_number, va_* extras, and nested inspections whose only
+# mapped column is the date.
+VA_RECORD = {
+    "va_ID": "35291",
+    "provider_name": "4 Rs Preschool",
+    "address": "6745 Jefferson Street HAYMARKET, VA 20169",
+    "phone": "(703) 754-2497",
+    "provider_type": "Child Day Center",
+    "va_license_type": "Two Year",
+    "administrator": "Robyn Frazier",
+    "hours": "9:00 a.m. - 3:30 p.m., Monday - Friday",
+    "capacity": "26",
+    "ages_served": "3 years - 6 years 11 months",
+    "va_quality_rating": "4",
+    "license_number": "1106312",
+    "source_state": "VA",
+    "provider_url": "https://legacy.dss.virginia.gov/facility/search/cc2.cgi?ID=35291",
+    "inspections": [
+        {
+            "date": "May 13, 2026",
+            "va_shsi": "No",
+            "va_complaint_related": "No",
+            "va_violations": "Yes",
+        },
+        {
+            "date": "Jan. 30, 2025",
+            "va_shsi": "No",
+            "va_complaint_related": "No",
+            "va_violations": "No",
+        },
+    ],
+}
+
 # New York: no license_number key at all; ny_facility_id doubles as the license.
 NY_RECORD = {
     "source_state": "NY",
@@ -166,3 +199,69 @@ def test_new_york_rerun_matches_on_facility_id_not_duplicated(tmp_path):
 
     provider = Provider.objects.get()  # still exactly one row
     assert provider.provider_name == "Huckabone, Kimberly (Renamed)"
+
+
+@pytest.mark.django_db
+def test_virginia_maps_columns_and_state_data(tmp_path):
+    _load(tmp_path, [VA_RECORD], state="virginia")
+
+    provider = Provider.objects.get()
+    # Cross-state keys land on real columns...
+    assert provider.provider_name == "4 Rs Preschool"
+    assert provider.license_number == "1106312"
+    assert provider.source_state == "VA"
+    assert provider.administrator == "Robyn Frazier"
+    assert provider.ages_served == "3 years - 6 years 11 months"
+    # ...and VA-specific keys are preserved verbatim in state_data.
+    assert provider.state_data["va_ID"] == "35291"
+    assert provider.state_data["va_license_type"] == "Two Year"
+    assert provider.state_data["va_quality_rating"] == "4"
+    assert "inspections" not in provider.state_data
+
+
+@pytest.mark.django_db
+def test_virginia_creates_inspections_with_state_data(tmp_path):
+    _load(tmp_path, [VA_RECORD], state="virginia")
+
+    provider = Provider.objects.get()
+    assert provider.inspections.count() == len(VA_RECORD["inspections"])
+    # Only the date maps to a real column; the rest is VA-specific state_data.
+    inspection = provider.inspections.get(date="May 13, 2026")
+    assert inspection.state_data["va_violations"] == "Yes"
+    assert inspection.state_data["va_complaint_related"] == "No"
+
+
+@pytest.mark.django_db
+def test_virginia_rerun_updates_in_place_and_rebuilds_inspections(tmp_path):
+    _load(tmp_path, [VA_RECORD], state="virginia")
+
+    changed = {**VA_RECORD, "provider_name": "4 Rs Preschool (Renamed)"}
+    _load(tmp_path, [changed], state="virginia")
+
+    provider = Provider.objects.get()  # still exactly one row
+    assert provider.provider_name == "4 Rs Preschool (Renamed)"
+    # Inspections are rebuilt, not duplicated.
+    expected = len(VA_RECORD["inspections"])
+    assert provider.inspections.count() == expected
+    assert Inspection.objects.count() == expected
+
+
+@pytest.mark.django_db
+def test_virginia_shared_license_number_stays_distinct(tmp_path):
+    # A single VA license_number is shared across distinct facilities, so records
+    # must be matched on the stable va_ID, not collapsed onto one row.
+    other = {
+        **VA_RECORD,
+        "va_ID": "51359",
+        "provider_name": "The Hope Center",
+        "inspections": [],
+    }
+    records = [VA_RECORD, other]
+
+    _load(tmp_path, records, state="virginia")
+    _load(tmp_path, records, state="virginia")  # idempotent
+
+    same_license = Provider.objects.filter(license_number=VA_RECORD["license_number"])
+    assert same_license.count() == len(records)
+    names = sorted(same_license.values_list("provider_name", flat=True))
+    assert names == ["4 Rs Preschool", "The Hope Center"]

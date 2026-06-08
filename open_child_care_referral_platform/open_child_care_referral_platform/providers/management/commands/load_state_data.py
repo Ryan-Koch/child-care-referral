@@ -1,7 +1,7 @@
 """Upsert a state's scraped child-care data into the database.
 
-South Carolina and New York are wired up so far. The raw per-state JSON lives
-outside the project root in ``state_ingestion_files/<state>.json``; each record is
+South Carolina, New York, and Virginia are wired up so far. The raw per-state JSON
+lives outside the project root in ``state_ingestion_files/<state>.json``; each record is
 mapped onto the cross-state :class:`Provider` columns, with everything
 state-specific preserved verbatim under ``state_data``. Nested ``inspections``
 become :class:`Inspection` rows.
@@ -12,7 +12,9 @@ them. South Carolina records without a ``license_number`` (unlicensed/exempt
 providers) fall back to the state's own stable ``sc_provider_id`` so they are not
 collapsed onto one another. New York providers carry no license number at all, so
 the state's stable ``ny_facility_id`` doubles as the ``license_number`` (and is
-kept verbatim under ``state_data`` too).
+kept verbatim under ``state_data`` too). Virginia keeps its real ``license_number``
+but matches on the stable ``va_ID`` instead, because a single VA license number is
+shared across multiple distinct facilities.
 """
 
 import json
@@ -46,10 +48,13 @@ class MappedProvider:
     columns: dict[str, Any]
     state_data: dict[str, Any]
     inspections: list[MappedInspection]
-    # Identity used only when ``license_number`` is missing: a key looked up
-    # inside ``state_data`` (plus its value) so such records stay distinct.
+    # The state's own stable per-record id: a key looked up inside ``state_data``
+    # (plus its value). Used to keep records distinct when ``license_number`` is
+    # missing, or as the primary match key when ``identity_is_fallback`` is set
+    # (e.g. Virginia, whose license_number is shared across multiple facilities).
     fallback_key: str
     fallback_value: Any
+    identity_is_fallback: bool = False
 
 
 # Provider JSON keys that map onto real ``Provider`` columns (names line up
@@ -163,10 +168,67 @@ def map_new_york(record: dict[str, Any]) -> MappedProvider:
     )
 
 
+# Virginia JSON keys that map onto real ``Provider`` columns (names line up 1:1).
+# The ``va_*`` keys (va_ID, va_license_type, va_quality_rating, ...) are preserved
+# under ``state_data``.
+VA_PROVIDER_COLUMNS = frozenset(
+    {
+        "provider_name",
+        "license_number",
+        "provider_type",
+        "address",
+        "phone",
+        "administrator",
+        "capacity",
+        "hours",
+        "ages_served",
+        "source_state",
+        "provider_url",
+    },
+)
+
+# Virginia inspection keys that map onto real ``Inspection`` columns (only date).
+VA_INSPECTION_COLUMNS = frozenset({"date"})
+
+# Stable per-record id used as Virginia's identity for matching (its
+# license_number is shared across multiple distinct facilities).
+VA_FALLBACK_KEY = "va_ID"
+
+
+def _map_va_inspection(raw: dict[str, Any]) -> MappedInspection:
+    columns = {key: raw.get(key) for key in VA_INSPECTION_COLUMNS}
+    state_data = {
+        key: value for key, value in raw.items() if key not in VA_INSPECTION_COLUMNS
+    }
+    return MappedInspection(columns=columns, state_data=state_data)
+
+
+def map_virginia(record: dict[str, Any]) -> MappedProvider:
+    """Map one raw Virginia record onto the normalized provider shape."""
+    columns = {key: record.get(key) for key in VA_PROVIDER_COLUMNS}
+    state_data = {
+        key: value
+        for key, value in record.items()
+        if key not in VA_PROVIDER_COLUMNS and key != "inspections"
+    }
+    inspections = [_map_va_inspection(raw) for raw in record.get("inspections") or []]
+    return MappedProvider(
+        columns=columns,
+        state_data=state_data,
+        inspections=inspections,
+        fallback_key=VA_FALLBACK_KEY,
+        fallback_value=record.get(VA_FALLBACK_KEY),
+        # Virginia's license_number is shared across facilities, so the stable
+        # va_ID is the identity used for matching.
+        identity_is_fallback=True,
+    )
+
+
 # Registry of per-state mappers. Add a new entry here to support another state.
 MAPPERS = {
     "new_york": map_new_york,
     "south_carolina": map_south_carolina,
+    "virginia": map_virginia,
 }
 
 
@@ -177,7 +239,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "state",
             choices=sorted(MAPPERS),
-            help="Which state's data to load (new_york or south_carolina so far).",
+            help="Which state's data to load (new_york, south_carolina, virginia).",
         )
         parser.add_argument(
             "--path",
@@ -262,7 +324,9 @@ class Command(BaseCommand):
         source_state = mapped.columns.get("source_state")
         scoped = Provider.objects.filter(source_state=source_state)
         license_number = mapped.columns.get("license_number")
-        if license_number:
+        # Match on license_number unless the state's stable id is the identity
+        # (its license_number is not unique), in which case skip straight to it.
+        if license_number and not mapped.identity_is_fallback:
             return scoped.filter(license_number=license_number).first()
         if mapped.fallback_value is None:
             return None
