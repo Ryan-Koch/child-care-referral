@@ -1,16 +1,18 @@
 """Upsert a state's scraped child-care data into the database.
 
-Only South Carolina is wired up so far. The raw per-state JSON lives outside the
-project root in ``state_ingestion_files/<state>.json``; each record is mapped onto
-the cross-state :class:`Provider` columns, with everything state-specific
-preserved verbatim under ``state_data``. Nested ``inspections`` become
-:class:`Inspection` rows.
+South Carolina and New York are wired up so far. The raw per-state JSON lives
+outside the project root in ``state_ingestion_files/<state>.json``; each record is
+mapped onto the cross-state :class:`Provider` columns, with everything
+state-specific preserved verbatim under ``state_data``. Nested ``inspections``
+become :class:`Inspection` rows.
 
 The load is idempotent: providers are matched on ``license_number`` (scoped to
 ``source_state``), so re-running updates rows in place instead of duplicating
 them. South Carolina records without a ``license_number`` (unlicensed/exempt
 providers) fall back to the state's own stable ``sc_provider_id`` so they are not
-collapsed onto one another.
+collapsed onto one another. New York providers carry no license number at all, so
+the state's stable ``ny_facility_id`` doubles as the ``license_number`` (and is
+kept verbatim under ``state_data`` too).
 """
 
 import json
@@ -106,8 +108,64 @@ def map_south_carolina(record: dict[str, Any]) -> MappedProvider:
     )
 
 
+# New York JSON keys that map onto real ``Provider`` columns (names line up 1:1).
+# Everything else (the ``ny_*`` keys, including ``ny_facility_id``) is preserved
+# under ``state_data``.
+NY_PROVIDER_COLUMNS = frozenset(
+    {
+        "provider_name",
+        "provider_type",
+        "status",
+        "address",
+        "latitude",
+        "longitude",
+        "phone",
+        "capacity",
+        "county",
+        "license_holder",
+        "license_begin_date",
+        "license_expiration",
+        "infant",
+        "toddler",
+        "preschool",
+        "school",
+        "source_state",
+        "provider_url",
+    },
+)
+
+# New York has no license number, so this stable facility id is reused as the
+# license_number and also matches unchanged-license re-runs.
+NY_FALLBACK_KEY = "ny_facility_id"
+
+
+def map_new_york(record: dict[str, Any]) -> MappedProvider:
+    """Map one raw New York record onto the normalized provider shape.
+
+    New York records have no ``license_number``; the stable ``ny_facility_id`` is
+    reused as the ``license_number`` column so the row is identifiable and the
+    idempotent upsert can match on it. The facility id is intentionally left in
+    ``state_data`` as well, so it is duplicated across both for now.
+    """
+    columns = {key: record.get(key) for key in NY_PROVIDER_COLUMNS}
+    facility_id = record.get(NY_FALLBACK_KEY)
+    # No license_number in the source: fall back to the facility id.
+    columns["license_number"] = record.get("license_number") or facility_id
+    state_data = {
+        key: value for key, value in record.items() if key not in NY_PROVIDER_COLUMNS
+    }
+    return MappedProvider(
+        columns=columns,
+        state_data=state_data,
+        inspections=[],
+        fallback_key=NY_FALLBACK_KEY,
+        fallback_value=facility_id,
+    )
+
+
 # Registry of per-state mappers. Add a new entry here to support another state.
 MAPPERS = {
+    "new_york": map_new_york,
     "south_carolina": map_south_carolina,
 }
 
@@ -119,7 +177,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "state",
             choices=sorted(MAPPERS),
-            help="Which state's data to load (only south_carolina so far).",
+            help="Which state's data to load (new_york or south_carolina so far).",
         )
         parser.add_argument(
             "--path",
