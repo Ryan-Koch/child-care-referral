@@ -5,13 +5,33 @@
   <span class="text-muted">{{ paginator.count }} total</span>
 </div>
 <form method="get" class="card card-body shadow-sm mb-4">
+  <div class="row g-3 mb-3">
+    <div class="col-md-8">
+      <label for="search-input" class="form-label mb-1">Search by name</label>
+      <input id="search-input"
+             type="search"
+             name="q"
+             value="{{ search_query }}"
+             class="form-control"
+             placeholder="Provider name (fuzzy match)…" />
+    </div>
+    <div class="col-md-4">
+      <label for="license-input" class="form-label mb-1">License number</label>
+      <input id="license-input"
+             type="search"
+             name="license_number"
+             value="{{ selected_license_number }}"
+             class="form-control"
+             placeholder="e.g. 716" />
+    </div>
+  </div>
   <div class="row g-3 align-items-end">
     <div class="col-12 col-sm-6 col-lg">
       <label for="state-select" class="form-label mb-1">State</label>
       <select id="state-select"
               name="state"
               class="form-select"
-              onchange="this.form.county.value='';this.form.provider_type.value='';if(this.form.sc_rating){this.form.sc_rating.value='';}this.form.submit()">
+              onchange="this.form.county.value='';this.form.provider_type.value='';if(this.form.sc_rating){this.form.sc_rating.value='';}if(this.form.sc_program){this.form.sc_program.selectedIndex=-1;}this.form.submit()">
         <option value="">All states</option>
         {% for state in states %}
         <option value="{{ state }}" {% if state == selected_state %}selected{% endif %}>{{ state }}</option>
@@ -58,8 +78,43 @@
       </select>
     </div>
     {% endif %}
-    <div class="col-12 col-sm-auto">
-      <button type="submit" class="btn btn-primary w-100">Search</button>
+  </div>
+  {% if sc_programs %}
+  <div class="row g-3 mt-1">
+    <div class="col-md-6 col-lg-4">
+      <label for="program-select" class="form-label mb-1">Program participation</label>
+      <select id="program-select"
+              name="sc_program"
+              class="form-select"
+              multiple
+              size="4">
+        {% for program in sc_programs %}
+        <option value="{{ program }}" {% if program in selected_sc_programs %}selected{% endif %}>{{ program }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-text">
+        Hold Ctrl/Cmd to select multiple; matches providers in all selected
+        programs.
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  <div class="row g-2 align-items-center mt-1">
+    <div class="col-auto">
+      <div class="form-check">
+        <input id="active-check"
+               type="checkbox"
+               name="active"
+               value="1"
+               class="form-check-input"
+               onchange="this.form.submit()"
+               {% if active_only %}checked{% endif %} />
+        <label for="active-check" class="form-check-label">License currently active</label>
+      </div>
+    </div>
+    <div class="col"></div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary">Search</button>
     </div>
   </div>
 </form>

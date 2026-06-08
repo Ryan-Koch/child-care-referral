@@ -4,6 +4,13 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 from typing import Any
 
+from django.contrib.postgres.search import TrigramWordSimilarity
+from django.db.models import DateField
+from django.db.models import F
+from django.db.models import Func
+from django.db.models import Q
+from django.db.models import Value
+from django.utils import timezone
 from django.views.generic import DetailView
 from django.views.generic import ListView
 
@@ -34,6 +41,12 @@ SOUTH_CAROLINA = "South Carolina"
 # in this sequence rather than sorted alphabetically.
 SC_ABC_RATINGS = ("A+", "A", "B+", "B", "C", "P", "E")
 SC_RATING_FIELD = "state_data__sc_abc_quality_rating"
+SC_PROGRAM_FIELD = "state_data__sc_program_participation"
+
+# Minimum trigram word-similarity for a provider_name to count as a fuzzy match.
+# Lower = more lenient (more typo tolerance, more noise). Exact substrings are
+# always included regardless of this threshold.
+NAME_SEARCH_THRESHOLD = 0.3
 
 
 def _distinct_values(queryset: QuerySet[Provider], field: str) -> list[str]:
@@ -70,6 +83,24 @@ class ProviderListView(ListView):
         return self.request.GET.get("sc_rating", "")
 
     @cached_property
+    def selected_sc_programs(self) -> list[str]:
+        # Multi-select: keep only valid programs, in canonical (sorted) order.
+        chosen = self.request.GET.getlist("sc_program")
+        return [program for program in self.sc_programs if program in chosen]
+
+    @cached_property
+    def selected_license_number(self) -> str:
+        return self.request.GET.get("license_number", "").strip()
+
+    @cached_property
+    def active_only(self) -> bool:
+        return self.request.GET.get("active") == "1"
+
+    @cached_property
+    def search_query(self) -> str:
+        return self.request.GET.get("q", "").strip()
+
+    @cached_property
     def _state_providers(self) -> QuerySet[Provider]:
         # Valid only once a state is chosen; callers guard on ``selected_state``.
         return Provider.objects.filter(source_state=self.selected_state)
@@ -103,6 +134,19 @@ class ProviderListView(ListView):
         )
         return [rating for rating in SC_ABC_RATINGS if rating in present]
 
+    @cached_property
+    def sc_programs(self) -> list[str]:
+        # State-specific filter. ``sc_program_participation`` is a JSON array, so
+        # the distinct program names are gathered by flattening those arrays.
+        if self.selected_state != SOUTH_CAROLINA:
+            return []
+        lists = self._state_providers.values_list(SC_PROGRAM_FIELD, flat=True)
+        programs: set[str] = set()
+        for value in lists:
+            if value:
+                programs.update(value)
+        return sorted(programs)
+
     def get_queryset(self) -> QuerySet[Provider]:
         queryset = super().get_queryset()
         if self.selected_state:
@@ -114,7 +158,49 @@ class ProviderListView(ListView):
                 queryset = queryset.filter(provider_type=self.selected_provider_type)
             if self.selected_sc_rating in self.sc_ratings:
                 queryset = queryset.filter(**{SC_RATING_FIELD: self.selected_sc_rating})
+            if self.selected_sc_programs:
+                # Containment with a list is AND: the array must hold them all.
+                queryset = queryset.filter(
+                    **{f"{SC_PROGRAM_FIELD}__contains": self.selected_sc_programs},
+                )
+        if self.selected_license_number:
+            queryset = queryset.filter(
+                license_number__icontains=self.selected_license_number,
+            )
+        if self.active_only:
+            queryset = self._filter_active(queryset)
+        if self.search_query:
+            queryset = self._search_by_name(queryset)
         return queryset
+
+    def _filter_active(self, queryset: QuerySet[Provider]) -> QuerySet[Provider]:
+        # license_expiration is raw scraped text ("M/D/YYYY"); parse it in the
+        # database and keep providers whose license has not yet expired. NULLIF
+        # guards against blank strings; NULL/unparseable dates drop out.
+        expiration_date = Func(
+            Func(F("license_expiration"), Value(""), function="NULLIF"),
+            Value("FMMM/FMDD/YYYY"),
+            function="to_date",
+            output_field=DateField(),
+        )
+        return queryset.annotate(license_expiration_date=expiration_date).filter(
+            license_expiration_date__gt=timezone.localdate(),
+        )
+
+    def _search_by_name(self, queryset: QuerySet[Provider]) -> QuerySet[Provider]:
+        # Fuzzy match on provider_name via pg_trgm word similarity, but always
+        # include plain substring hits so exact typing never falls below the
+        # similarity threshold. Best matches first.
+        return (
+            queryset.annotate(
+                similarity=TrigramWordSimilarity(self.search_query, "provider_name"),
+            )
+            .filter(
+                Q(provider_name__icontains=self.search_query)
+                | Q(similarity__gte=NAME_SEARCH_THRESHOLD),
+            )
+            .order_by("-similarity", "provider_name")
+        )
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -122,10 +208,15 @@ class ProviderListView(ListView):
         context["counties"] = self.counties
         context["provider_types"] = self.provider_types
         context["sc_ratings"] = self.sc_ratings
+        context["sc_programs"] = self.sc_programs
         context["selected_state"] = self.selected_state
         context["selected_county"] = self.selected_county
         context["selected_provider_type"] = self.selected_provider_type
         context["selected_sc_rating"] = self.selected_sc_rating
+        context["selected_sc_programs"] = self.selected_sc_programs
+        context["selected_license_number"] = self.selected_license_number
+        context["active_only"] = self.active_only
+        context["search_query"] = self.search_query
         return context
 
 

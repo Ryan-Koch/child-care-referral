@@ -210,3 +210,122 @@ def test_sc_rating_ignored_for_other_state(client, rated_providers):
 
     names = [provider.provider_name for provider in response.context["providers"]]
     assert names == ["Georgia One"]
+
+
+@pytest.fixture
+def named_providers(db):
+    for name in ("Sunshine Daycare", "Cheraw Head Start", "Little Explorers Academy"):
+        Provider.objects.create(provider_name=name, source_state="South Carolina")
+
+
+@pytest.mark.django_db
+def test_name_search_matches_substring(client, named_providers):
+    response = client.get(reverse("providers:list"), {"q": "head"})
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Cheraw Head Start"]
+
+
+@pytest.mark.django_db
+def test_name_search_is_fuzzy(client, named_providers):
+    # "Sunshyne" is a typo for "Sunshine" and shares no substring, so only
+    # trigram similarity can match it.
+    response = client.get(reverse("providers:list"), {"q": "Sunshyne"})
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert "Sunshine Daycare" in names
+
+
+@pytest.mark.django_db
+def test_name_search_returns_nothing_for_no_match(client, named_providers):
+    response = client.get(reverse("providers:list"), {"q": "zzzzzzz"})
+
+    assert list(response.context["providers"]) == []
+
+
+@pytest.mark.django_db
+def test_name_search_combines_with_state_filter(client, named_providers):
+    Provider.objects.create(provider_name="Sunshine Daycare", source_state="Georgia")
+
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "South Carolina", "q": "Sunshine"},
+    )
+
+    providers = list(response.context["providers"])
+    assert [p.provider_name for p in providers] == ["Sunshine Daycare"]
+    assert all(p.source_state == "South Carolina" for p in providers)
+
+
+@pytest.fixture
+def program_providers(db):
+    Provider.objects.create(
+        provider_name="Head Start One",
+        source_state="South Carolina",
+        state_data={"sc_program_participation": ["Head Start", "First Steps 4K"]},
+    )
+    Provider.objects.create(
+        provider_name="Four-K Only",
+        source_state="South Carolina",
+        state_data={"sc_program_participation": ["First Steps 4K"]},
+    )
+    Provider.objects.create(
+        provider_name="No Programs",
+        source_state="South Carolina",
+        state_data={},
+    )
+
+
+@pytest.mark.django_db
+def test_sc_program_filter_only_offered_for_south_carolina(client, program_providers):
+    assert client.get(reverse("providers:list")).context["sc_programs"] == []
+
+    in_sc = client.get(reverse("providers:list"), {"state": "South Carolina"})
+    assert in_sc.context["sc_programs"] == ["First Steps 4K", "Head Start"]
+
+
+@pytest.mark.django_db
+def test_sc_program_filter_matches_membership_in_array(client, program_providers):
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "South Carolina", "sc_program": "Head Start"},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    # Both providers that participate in Head Start (alone or combined).
+    assert names == ["Head Start One"]
+
+
+@pytest.mark.django_db
+def test_sc_program_multiselect_requires_all_selected(client, program_providers):
+    # AND semantics: only providers participating in *every* selected program.
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "South Carolina", "sc_program": ["Head Start", "First Steps 4K"]},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Head Start One"]
+
+
+@pytest.mark.django_db
+def test_license_number_filter_matches_substring(client):
+    Provider.objects.create(provider_name="A", license_number="716")
+    Provider.objects.create(provider_name="B", license_number="22227")
+
+    response = client.get(reverse("providers:list"), {"license_number": "716"})
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["A"]
+
+
+@pytest.mark.django_db
+def test_active_license_filter(client):
+    Provider.objects.create(provider_name="Active", license_expiration="12/31/2999")
+    Provider.objects.create(provider_name="Expired", license_expiration="1/1/2000")
+    Provider.objects.create(provider_name="No License", license_expiration=None)
+
+    response = client.get(reverse("providers:list"), {"active": "1"})
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Active"]
