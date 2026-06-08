@@ -33,7 +33,7 @@
         <select id="state-select"
                 name="state"
                 class="form-select"
-                onchange="this.form.county.value='';this.form.provider_type.value='';if(this.form.sc_rating){this.form.sc_rating.value='';}if(this.form.sc_program){this.form.sc_program.selectedIndex=-1;}if(this.form.ny_region){this.form.ny_region.value='';}if(this.form.ny_district){this.form.ny_district.value='';}this.form.querySelectorAll('input[name=ny_age]').forEach(function(c){c.checked=false;});this.form.submit()">
+                onchange="this.form.county.value='';this.form.provider_type.value='';if(this.form.sc_rating){this.form.sc_rating.value='';}if(this.form.sc_program){this.form.sc_program.selectedIndex=-1;}if(this.form.ny_region){this.form.ny_region.value='';}if(this.form.ny_district){this.form.ny_district.value='';}this.form.querySelectorAll('input[name=ny_age]').forEach(function(c){c.checked=false;});if(this.form.va_quality){this.form.va_quality.value='';}if(this.form.va_funding){this.form.va_funding.selectedIndex=-1;}this.form.submit()">
           <option value="">All states</option>
           {% for state in states %}
             <option value="{{ state }}"
@@ -114,6 +114,21 @@
           </select>
         </div>
       {% endif %}
+      {% if va_quality_ratings %}
+        <div class="col-12 col-sm-6 col-lg">
+          <label for="va-quality-select" class="form-label mb-1">Quality rating</label>
+          <select id="va-quality-select"
+                  name="va_quality"
+                  class="form-select"
+                  onchange="this.form.submit()">
+            <option value="">All ratings</option>
+            {% for rating in va_quality_ratings %}
+              <option value="{{ rating }}"
+                      {% if rating == selected_va_quality %}selected{% endif %}>{{ rating }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% endif %}
     </div>
     {% if sc_programs %}
       <div class="row g-3 mt-1">
@@ -155,6 +170,27 @@
             {% endfor %}
           </div>
           <div class="form-text">Keeps providers with capacity above zero in every selected age group.</div>
+        </div>
+      </div>
+    {% endif %}
+    {% if va_fundings %}
+      <div class="row g-3 mt-1">
+        <div class="col-md-6 col-lg-4">
+          <label for="va-funding-select" class="form-label mb-1">Public funding</label>
+          <select id="va-funding-select"
+                  name="va_funding"
+                  class="form-select"
+                  multiple
+                  size="4">
+            {% for funding in va_fundings %}
+              <option value="{{ funding }}"
+                      {% if funding in selected_va_funding %}selected{% endif %}>{{ funding }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">
+            Hold Ctrl/Cmd to select multiple; matches providers receiving all
+            selected funding.
+          </div>
         </div>
       </div>
     {% endif %}

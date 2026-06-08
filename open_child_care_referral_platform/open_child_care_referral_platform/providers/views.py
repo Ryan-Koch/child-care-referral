@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from functools import cached_property
 from typing import TYPE_CHECKING
 from typing import Any
@@ -58,6 +59,15 @@ NY_AGE_BUCKETS = (
     ("school", "School-age"),
 )
 
+VIRGINIA = "VA"
+# Virginia quality ratings, best to worst. This order is a meaningful gradient
+# (like SC's ABC), so the filter offers the values in this sequence.
+VA_QUALITY_RATINGS = ("Exceeds Expectations", "Meets Expectations", "Needs Support")
+VA_QUALITY_FIELD = "state_data__va_quality_rating"
+# Public-funding programs are stored as a single ';'-delimited string (not a JSON
+# array), so options are split out and matches are made on delimited tokens.
+VA_FUNDING_FIELD = "state_data__va_public_funding"
+
 # Minimum trigram word-similarity for a provider_name to count as a fuzzy match.
 # Lower = more lenient (more typo tolerance, more noise). Exact substrings are
 # always included regardless of this threshold.
@@ -96,6 +106,16 @@ def _filter_positive(queryset: QuerySet[Provider], field: str) -> QuerySet[Provi
         )
         .filter(**{f"{annotation}__gt": 0})
     )
+
+
+def _delimited_token_regex(token: str) -> str:
+    """Regex matching ``token`` as a whole ``;``-delimited element of a string.
+
+    Matching the delimiter boundaries avoids substring false positives (e.g.
+    selecting "Head Start" must not also match "Early Head Start"). The token is
+    escaped because some carry regex metacharacters, e.g. "...(MCCYN)".
+    """
+    return rf"(^|;\s*){re.escape(token)}(\s*;|$)"
 
 
 class ProviderListView(ListView):
@@ -145,6 +165,16 @@ class ProviderListView(ListView):
     @cached_property
     def has_capacity(self) -> bool:
         return self.request.GET.get("has_capacity") == "1"
+
+    @cached_property
+    def selected_va_quality(self) -> str:
+        return self.request.GET.get("va_quality", "")
+
+    @cached_property
+    def selected_va_funding(self) -> list[str]:
+        # Multi-select: keep only valid programs, in canonical (sorted) order.
+        chosen = self.request.GET.getlist("va_funding")
+        return [funding for funding in self.va_fundings if funding in chosen]
 
     @cached_property
     def selected_license_number(self) -> str:
@@ -224,6 +254,32 @@ class ProviderListView(ListView):
         # (field, label) pairs the template renders as checkboxes; New York only.
         return list(NY_AGE_BUCKETS) if self.selected_state == NEW_YORK else []
 
+    @cached_property
+    def va_quality_ratings(self) -> list[str]:
+        # State-specific filter: only offered for Virginia, in the canonical
+        # quality order, limited to ratings present in the data.
+        if self.selected_state != VIRGINIA:
+            return []
+        present = set(
+            self._state_providers.values_list(VA_QUALITY_FIELD, flat=True).distinct(),
+        )
+        return [rating for rating in VA_QUALITY_RATINGS if rating in present]
+
+    @cached_property
+    def va_fundings(self) -> list[str]:
+        # State-specific filter. va_public_funding is a ';'-delimited string, so
+        # the distinct program names are gathered by splitting and flattening.
+        if self.selected_state != VIRGINIA:
+            return []
+        values = self._state_providers.values_list(VA_FUNDING_FIELD, flat=True)
+        fundings: set[str] = set()
+        for value in values:
+            if value:
+                fundings.update(
+                    token.strip() for token in value.split(";") if token.strip()
+                )
+        return sorted(fundings)
+
     def get_queryset(self) -> QuerySet[Provider]:
         queryset = super().get_queryset()
         if self.selected_state:
@@ -262,6 +318,16 @@ class ProviderListView(ListView):
         # Each selected age group must have capacity > 0 (AND semantics).
         for field in self.selected_ny_ages:
             queryset = _filter_positive(queryset, field)
+        return self._apply_va_filters(queryset)
+
+    def _apply_va_filters(self, queryset: QuerySet[Provider]) -> QuerySet[Provider]:
+        if self.selected_va_quality in self.va_quality_ratings:
+            queryset = queryset.filter(**{VA_QUALITY_FIELD: self.selected_va_quality})
+        # Each selected funding program must appear as a delimited token (AND).
+        for funding in self.selected_va_funding:
+            queryset = queryset.filter(
+                **{f"{VA_FUNDING_FIELD}__regex": _delimited_token_regex(funding)},
+            )
         return queryset
 
     def _filter_active(self, queryset: QuerySet[Provider]) -> QuerySet[Provider]:
@@ -303,6 +369,8 @@ class ProviderListView(ListView):
         context["ny_regions"] = self.ny_regions
         context["ny_districts"] = self.ny_districts
         context["ny_age_buckets"] = self.ny_age_buckets
+        context["va_quality_ratings"] = self.va_quality_ratings
+        context["va_fundings"] = self.va_fundings
         context["selected_state"] = self.selected_state
         context["selected_county"] = self.selected_county
         context["selected_provider_type"] = self.selected_provider_type
@@ -312,6 +380,8 @@ class ProviderListView(ListView):
         context["selected_ny_district"] = self.selected_ny_district
         context["selected_ny_ages"] = self.selected_ny_ages
         context["has_capacity"] = self.has_capacity
+        context["selected_va_quality"] = self.selected_va_quality
+        context["selected_va_funding"] = self.selected_va_funding
         context["selected_license_number"] = self.selected_license_number
         context["active_only"] = self.active_only
         context["search_query"] = self.search_query

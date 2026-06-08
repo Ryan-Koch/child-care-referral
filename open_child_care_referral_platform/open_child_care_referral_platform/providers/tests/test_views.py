@@ -461,3 +461,101 @@ def test_has_capacity_filter_applies_across_states(client):
 
     names = [provider.provider_name for provider in response.context["providers"]]
     assert names == ["Big"]
+
+
+@pytest.fixture
+def va_providers(db):
+    # Ratings out of canonical order to prove ordering is by the quality gradient.
+    Provider.objects.create(
+        provider_name="Meets Place",
+        source_state="VA",
+        state_data={
+            "va_quality_rating": "Meets Expectations",
+            "va_public_funding": "VPI; Head Start; VA CCSP",
+        },
+    )
+    Provider.objects.create(
+        provider_name="Top Place",
+        source_state="VA",
+        state_data={
+            "va_quality_rating": "Exceeds Expectations",
+            # "Early Head Start" must not be matched by a "Head Start" filter.
+            "va_public_funding": "Early Head Start; VA CCSP",
+        },
+    )
+    Provider.objects.create(
+        provider_name="Unrated Place",
+        source_state="VA",
+        state_data={},
+    )
+    # Another state carrying the same keys must not surface the VA filters.
+    Provider.objects.create(
+        provider_name="Carolina One",
+        source_state="South Carolina",
+        state_data={"va_quality_rating": "Meets Expectations"},
+    )
+
+
+@pytest.mark.django_db
+def test_va_quality_filter_only_offered_for_virginia(client, va_providers):
+    assert client.get(reverse("providers:list")).context["va_quality_ratings"] == []
+
+    in_va = client.get(reverse("providers:list"), {"state": "VA"})
+    # Canonical quality order, limited to ratings present in the data.
+    assert in_va.context["va_quality_ratings"] == [
+        "Exceeds Expectations",
+        "Meets Expectations",
+    ]
+
+    in_sc = client.get(reverse("providers:list"), {"state": "South Carolina"})
+    assert in_sc.context["va_quality_ratings"] == []
+
+
+@pytest.mark.django_db
+def test_va_quality_filter_limits_results(client, va_providers):
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "VA", "va_quality": "Exceeds Expectations"},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Top Place"]
+
+
+@pytest.mark.django_db
+def test_va_funding_filter_only_offered_for_virginia(client, va_providers):
+    assert client.get(reverse("providers:list")).context["va_fundings"] == []
+
+    in_va = client.get(reverse("providers:list"), {"state": "VA"})
+    # Distinct tokens split out of the ';'-delimited strings, sorted.
+    assert in_va.context["va_fundings"] == [
+        "Early Head Start",
+        "Head Start",
+        "VA CCSP",
+        "VPI",
+    ]
+
+
+@pytest.mark.django_db
+def test_va_funding_filter_matches_delimited_token_not_substring(client, va_providers):
+    # "Head Start" must match only the provider that funds it, not the one whose
+    # funding string contains "Early Head Start".
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "VA", "va_funding": "Head Start"},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Meets Place"]
+
+
+@pytest.mark.django_db
+def test_va_funding_multiselect_requires_all(client, va_providers):
+    # AND semantics: only providers receiving *every* selected funding program.
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "VA", "va_funding": ["Head Start", "VA CCSP"]},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Meets Place"]
