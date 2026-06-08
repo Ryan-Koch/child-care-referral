@@ -8,8 +8,11 @@ from django.contrib.postgres.search import TrigramWordSimilarity
 from django.db.models import DateField
 from django.db.models import F
 from django.db.models import Func
+from django.db.models import IntegerField
 from django.db.models import Q
 from django.db.models import Value
+from django.db.models.functions import Cast
+from django.db.models.functions import Replace
 from django.utils import timezone
 from django.views.generic import DetailView
 from django.views.generic import ListView
@@ -43,6 +46,18 @@ SC_ABC_RATINGS = ("A+", "A", "B+", "B", "C", "P", "E")
 SC_RATING_FIELD = "state_data__sc_abc_quality_rating"
 SC_PROGRAM_FIELD = "state_data__sc_program_participation"
 
+NEW_YORK = "NY"
+NY_REGION_FIELD = "state_data__ny_region_code"
+NY_DISTRICT_FIELD = "state_data__ny_school_district_name"
+# Child age-group capacity columns, each offered as a "serves this age" filter
+# (capacity > 0). (field, label) pairs; only surfaced when New York is selected.
+NY_AGE_BUCKETS = (
+    ("infant", "Infant"),
+    ("toddler", "Toddler"),
+    ("preschool", "Preschool"),
+    ("school", "School-age"),
+)
+
 # Minimum trigram word-similarity for a provider_name to count as a fuzzy match.
 # Lower = more lenient (more typo tolerance, more noise). Exact substrings are
 # always included regardless of this threshold.
@@ -57,6 +72,29 @@ def _distinct_values(queryset: QuerySet[Provider], field: str) -> list[str]:
         .order_by(field)
         .values_list(field, flat=True)
         .distinct(),
+    )
+
+
+# Scraped numeric text may carry thousands separators ("1,100"), so the regex
+# admits only digits/commas/whitespace and commas are stripped before the integer
+# cast — that keeps the cast from erroring on genuinely non-numeric values.
+_POSITIVE_INT_RE = r"^\s*\d[\d,]*\s*$"
+
+
+def _filter_positive(queryset: QuerySet[Provider], field: str) -> QuerySet[Provider]:
+    """Keep rows whose raw-text ``field`` parses to an integer greater than zero."""
+    annotation = f"{field}_positive"
+    return (
+        queryset.filter(**{f"{field}__regex": _POSITIVE_INT_RE})
+        .annotate(
+            **{
+                annotation: Cast(
+                    Replace(F(field), Value(","), Value("")),
+                    output_field=IntegerField(),
+                ),
+            },
+        )
+        .filter(**{f"{annotation}__gt": 0})
     )
 
 
@@ -87,6 +125,26 @@ class ProviderListView(ListView):
         # Multi-select: keep only valid programs, in canonical (sorted) order.
         chosen = self.request.GET.getlist("sc_program")
         return [program for program in self.sc_programs if program in chosen]
+
+    @cached_property
+    def selected_ny_region(self) -> str:
+        return self.request.GET.get("ny_region", "")
+
+    @cached_property
+    def selected_ny_district(self) -> str:
+        return self.request.GET.get("ny_district", "")
+
+    @cached_property
+    def selected_ny_ages(self) -> list[str]:
+        # Multi-select age-group capacity filters, meaningful only for New York.
+        if self.selected_state != NEW_YORK:
+            return []
+        chosen = self.request.GET.getlist("ny_age")
+        return [field for field, _label in NY_AGE_BUCKETS if field in chosen]
+
+    @cached_property
+    def has_capacity(self) -> bool:
+        return self.request.GET.get("has_capacity") == "1"
 
     @cached_property
     def selected_license_number(self) -> str:
@@ -147,30 +205,63 @@ class ProviderListView(ListView):
                 programs.update(value)
         return sorted(programs)
 
+    @cached_property
+    def ny_regions(self) -> list[str]:
+        # State-specific filter: only offered for New York.
+        if self.selected_state != NEW_YORK:
+            return []
+        return _distinct_values(self._state_providers, NY_REGION_FIELD)
+
+    @cached_property
+    def ny_districts(self) -> list[str]:
+        # State-specific filter: only offered for New York.
+        if self.selected_state != NEW_YORK:
+            return []
+        return _distinct_values(self._state_providers, NY_DISTRICT_FIELD)
+
+    @cached_property
+    def ny_age_buckets(self) -> list[tuple[str, str]]:
+        # (field, label) pairs the template renders as checkboxes; New York only.
+        return list(NY_AGE_BUCKETS) if self.selected_state == NEW_YORK else []
+
     def get_queryset(self) -> QuerySet[Provider]:
         queryset = super().get_queryset()
         if self.selected_state:
             queryset = queryset.filter(source_state=self.selected_state)
-            # Ignore stale values that do not belong to the chosen state.
-            if self.selected_county in self.counties:
-                queryset = queryset.filter(county=self.selected_county)
-            if self.selected_provider_type in self.provider_types:
-                queryset = queryset.filter(provider_type=self.selected_provider_type)
-            if self.selected_sc_rating in self.sc_ratings:
-                queryset = queryset.filter(**{SC_RATING_FIELD: self.selected_sc_rating})
-            if self.selected_sc_programs:
-                # Containment with a list is AND: the array must hold them all.
-                queryset = queryset.filter(
-                    **{f"{SC_PROGRAM_FIELD}__contains": self.selected_sc_programs},
-                )
+            queryset = self._apply_state_filters(queryset)
         if self.selected_license_number:
             queryset = queryset.filter(
                 license_number__icontains=self.selected_license_number,
             )
+        if self.has_capacity:
+            queryset = _filter_positive(queryset, "capacity")
         if self.active_only:
             queryset = self._filter_active(queryset)
         if self.search_query:
             queryset = self._search_by_name(queryset)
+        return queryset
+
+    def _apply_state_filters(self, queryset: QuerySet[Provider]) -> QuerySet[Provider]:
+        # Filters scoped to the chosen state. Each guards on the state's valid
+        # options so stale values left over from another state are ignored.
+        if self.selected_county in self.counties:
+            queryset = queryset.filter(county=self.selected_county)
+        if self.selected_provider_type in self.provider_types:
+            queryset = queryset.filter(provider_type=self.selected_provider_type)
+        if self.selected_sc_rating in self.sc_ratings:
+            queryset = queryset.filter(**{SC_RATING_FIELD: self.selected_sc_rating})
+        if self.selected_sc_programs:
+            # Containment with a list is AND: the array must hold them all.
+            queryset = queryset.filter(
+                **{f"{SC_PROGRAM_FIELD}__contains": self.selected_sc_programs},
+            )
+        if self.selected_ny_region in self.ny_regions:
+            queryset = queryset.filter(**{NY_REGION_FIELD: self.selected_ny_region})
+        if self.selected_ny_district in self.ny_districts:
+            queryset = queryset.filter(**{NY_DISTRICT_FIELD: self.selected_ny_district})
+        # Each selected age group must have capacity > 0 (AND semantics).
+        for field in self.selected_ny_ages:
+            queryset = _filter_positive(queryset, field)
         return queryset
 
     def _filter_active(self, queryset: QuerySet[Provider]) -> QuerySet[Provider]:
@@ -209,11 +300,18 @@ class ProviderListView(ListView):
         context["provider_types"] = self.provider_types
         context["sc_ratings"] = self.sc_ratings
         context["sc_programs"] = self.sc_programs
+        context["ny_regions"] = self.ny_regions
+        context["ny_districts"] = self.ny_districts
+        context["ny_age_buckets"] = self.ny_age_buckets
         context["selected_state"] = self.selected_state
         context["selected_county"] = self.selected_county
         context["selected_provider_type"] = self.selected_provider_type
         context["selected_sc_rating"] = self.selected_sc_rating
         context["selected_sc_programs"] = self.selected_sc_programs
+        context["selected_ny_region"] = self.selected_ny_region
+        context["selected_ny_district"] = self.selected_ny_district
+        context["selected_ny_ages"] = self.selected_ny_ages
+        context["has_capacity"] = self.has_capacity
         context["selected_license_number"] = self.selected_license_number
         context["active_only"] = self.active_only
         context["search_query"] = self.search_query

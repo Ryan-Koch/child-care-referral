@@ -1,251 +1,328 @@
-{% extends "base.html" %} {% block title %} Providers {% endblock title %}
+{% extends "base.html" %}
+
+{% block title %} Providers {% endblock title %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h3 mb-0">Providers</h1>
-  <span class="text-muted">{{ paginator.count }} total</span>
-</div>
-<form method="get" class="card card-body shadow-sm mb-4">
-  <div class="row g-3 mb-3">
-    <div class="col-md-8">
-      <label for="search-input" class="form-label mb-1">Search by name</label>
-      <input id="search-input"
-             type="search"
-             name="q"
-             value="{{ search_query }}"
-             class="form-control"
-             placeholder="Provider name (fuzzy match)…" />
-    </div>
-    <div class="col-md-4">
-      <label for="license-input" class="form-label mb-1">License number</label>
-      <input id="license-input"
-             type="search"
-             name="license_number"
-             value="{{ selected_license_number }}"
-             class="form-control"
-             placeholder="e.g. 716" />
-    </div>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Providers</h1>
+    <span class="text-muted">{{ paginator.count }} total</span>
   </div>
-  <div class="row g-3 align-items-end">
-    <div class="col-12 col-sm-6 col-lg">
-      <label for="state-select" class="form-label mb-1">State</label>
-      <select id="state-select"
-              name="state"
-              class="form-select"
-              onchange="this.form.county.value='';this.form.provider_type.value='';if(this.form.sc_rating){this.form.sc_rating.value='';}if(this.form.sc_program){this.form.sc_program.selectedIndex=-1;}this.form.submit()">
-        <option value="">All states</option>
-        {% for state in states %}
-        <option value="{{ state }}" {% if state == selected_state %}selected{% endif %}>{{ state }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-12 col-sm-6 col-lg">
-      <label for="county-select" class="form-label mb-1">County</label>
-      <select id="county-select"
-              name="county"
-              class="form-select"
-              onchange="this.form.submit()"
-              {% if not counties %}disabled{% endif %}>
-        <option value="">All counties</option>
-        {% for county in counties %}
-        <option value="{{ county }}" {% if county == selected_county %}selected{% endif %}>{{ county }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-12 col-sm-6 col-lg">
-      <label for="type-select" class="form-label mb-1">Provider type</label>
-      <select id="type-select"
-              name="provider_type"
-              class="form-select"
-              onchange="this.form.submit()"
-              {% if not provider_types %}disabled{% endif %}>
-        <option value="">All types</option>
-        {% for provider_type in provider_types %}
-        <option value="{{ provider_type }}" {% if provider_type == selected_provider_type %}selected{% endif %}>{{ provider_type }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% if sc_ratings %}
-    <div class="col-12 col-sm-6 col-lg">
-      <label for="sc-rating-select" class="form-label mb-1">ABC quality rating</label>
-      <select id="sc-rating-select"
-              name="sc_rating"
-              class="form-select"
-              onchange="this.form.submit()">
-        <option value="">All ratings</option>
-        {% for rating in sc_ratings %}
-        <option value="{{ rating }}" {% if rating == selected_sc_rating %}selected{% endif %}>{{ rating }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% endif %}
-  </div>
-  {% if sc_programs %}
-  <div class="row g-3 mt-1">
-    <div class="col-md-6 col-lg-4">
-      <label for="program-select" class="form-label mb-1">Program participation</label>
-      <select id="program-select"
-              name="sc_program"
-              class="form-select"
-              multiple
-              size="4">
-        {% for program in sc_programs %}
-        <option value="{{ program }}" {% if program in selected_sc_programs %}selected{% endif %}>{{ program }}</option>
-        {% endfor %}
-      </select>
-      <div class="form-text">
-        Hold Ctrl/Cmd to select multiple; matches providers in all selected
-        programs.
+  <form method="get" class="card card-body shadow-sm mb-4">
+    <div class="row g-3 mb-3">
+      <div class="col-md-8">
+        <label for="search-input" class="form-label mb-1">Search by name</label>
+        <input id="search-input"
+               type="search"
+               name="q"
+               value="{{ search_query }}"
+               class="form-control"
+               placeholder="Provider name (fuzzy match)…" />
+      </div>
+      <div class="col-md-4">
+        <label for="license-input" class="form-label mb-1">License number</label>
+        <input id="license-input"
+               type="search"
+               name="license_number"
+               value="{{ selected_license_number }}"
+               class="form-control"
+               placeholder="e.g. 716" />
       </div>
     </div>
+    <div class="row g-3 align-items-end">
+      <div class="col-12 col-sm-6 col-lg">
+        <label for="state-select" class="form-label mb-1">State</label>
+        <select id="state-select"
+                name="state"
+                class="form-select"
+                onchange="this.form.county.value='';this.form.provider_type.value='';if(this.form.sc_rating){this.form.sc_rating.value='';}if(this.form.sc_program){this.form.sc_program.selectedIndex=-1;}if(this.form.ny_region){this.form.ny_region.value='';}if(this.form.ny_district){this.form.ny_district.value='';}this.form.querySelectorAll('input[name=ny_age]').forEach(function(c){c.checked=false;});this.form.submit()">
+          <option value="">All states</option>
+          {% for state in states %}
+            <option value="{{ state }}"
+                    {% if state == selected_state %}selected{% endif %}>{{ state }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg">
+        <label for="county-select" class="form-label mb-1">County</label>
+        <select id="county-select"
+                name="county"
+                class="form-select"
+                onchange="this.form.submit()"
+                {% if not counties %}disabled{% endif %}>
+          <option value="">All counties</option>
+          {% for county in counties %}
+            <option value="{{ county }}"
+                    {% if county == selected_county %}selected{% endif %}>{{ county }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12 col-sm-6 col-lg">
+        <label for="type-select" class="form-label mb-1">Provider type</label>
+        <select id="type-select"
+                name="provider_type"
+                class="form-select"
+                onchange="this.form.submit()"
+                {% if not provider_types %}disabled{% endif %}>
+          <option value="">All types</option>
+          {% for provider_type in provider_types %}
+            <option value="{{ provider_type }}"
+                    {% if provider_type == selected_provider_type %}selected{% endif %}>{{ provider_type }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if sc_ratings %}
+        <div class="col-12 col-sm-6 col-lg">
+          <label for="sc-rating-select" class="form-label mb-1">ABC quality rating</label>
+          <select id="sc-rating-select"
+                  name="sc_rating"
+                  class="form-select"
+                  onchange="this.form.submit()">
+            <option value="">All ratings</option>
+            {% for rating in sc_ratings %}
+              <option value="{{ rating }}"
+                      {% if rating == selected_sc_rating %}selected{% endif %}>{{ rating }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% endif %}
+      {% if ny_regions %}
+        <div class="col-12 col-sm-6 col-lg">
+          <label for="ny-region-select" class="form-label mb-1">NY region</label>
+          <select id="ny-region-select"
+                  name="ny_region"
+                  class="form-select"
+                  onchange="this.form.submit()">
+            <option value="">All regions</option>
+            {% for region in ny_regions %}
+              <option value="{{ region }}"
+                      {% if region == selected_ny_region %}selected{% endif %}>{{ region }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% endif %}
+      {% if ny_districts %}
+        <div class="col-12 col-sm-6 col-lg">
+          <label for="ny-district-select" class="form-label mb-1">School district</label>
+          <select id="ny-district-select"
+                  name="ny_district"
+                  class="form-select"
+                  onchange="this.form.submit()">
+            <option value="">All districts</option>
+            {% for district in ny_districts %}
+              <option value="{{ district }}"
+                      {% if district == selected_ny_district %}selected{% endif %}>{{ district }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      {% endif %}
+    </div>
+    {% if sc_programs %}
+      <div class="row g-3 mt-1">
+        <div class="col-md-6 col-lg-4">
+          <label for="program-select" class="form-label mb-1">Program participation</label>
+          <select id="program-select"
+                  name="sc_program"
+                  class="form-select"
+                  multiple
+                  size="4">
+            {% for program in sc_programs %}
+              <option value="{{ program }}"
+                      {% if program in selected_sc_programs %}selected{% endif %}>{{ program }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">
+            Hold Ctrl/Cmd to select multiple; matches providers in all selected
+            programs.
+          </div>
+        </div>
+      </div>
+    {% endif %}
+    {% if ny_age_buckets %}
+      <div class="row g-3 mt-1">
+        <div class="col-12">
+          <label class="form-label mb-1">Age groups served</label>
+          <div class="d-flex flex-wrap gap-3">
+            {% for value, label in ny_age_buckets %}
+              <div class="form-check">
+                <input id="ny-age-{{ value }}"
+                       type="checkbox"
+                       name="ny_age"
+                       value="{{ value }}"
+                       class="form-check-input"
+                       onchange="this.form.submit()"
+                       {% if value in selected_ny_ages %}checked{% endif %} />
+                <label for="ny-age-{{ value }}" class="form-check-label">{{ label }}</label>
+              </div>
+            {% endfor %}
+          </div>
+          <div class="form-text">Keeps providers with capacity above zero in every selected age group.</div>
+        </div>
+      </div>
+    {% endif %}
+    <div class="row g-2 align-items-center mt-1">
+      <div class="col-auto">
+        <div class="form-check">
+          <input id="active-check"
+                 type="checkbox"
+                 name="active"
+                 value="1"
+                 class="form-check-input"
+                 onchange="this.form.submit()"
+                 {% if active_only %}checked{% endif %} />
+          <label for="active-check" class="form-check-label">License currently active</label>
+        </div>
+      </div>
+      <div class="col-auto">
+        <div class="form-check">
+          <input id="capacity-check"
+                 type="checkbox"
+                 name="has_capacity"
+                 value="1"
+                 class="form-check-input"
+                 onchange="this.form.submit()"
+                 {% if has_capacity %}checked{% endif %} />
+          <label for="capacity-check" class="form-check-label">Has capacity</label>
+        </div>
+      </div>
+      <div class="col"></div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary">Search</button>
+      </div>
+    </div>
+  </form>
+  <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
+    {% for provider in providers %}
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <h2 class="h5 card-title mb-0">
+                  <a href="{% url 'providers:detail' provider.pk %}"
+                     class="text-decoration-none stretched-link">
+                    {{ provider.provider_name|default:"Unnamed provider" }}
+                  </a>
+                </h2>
+                {% if provider.provider_type %}
+                  <div class="text-muted small">{{ provider.provider_type }}</div>
+                {% endif %}
+              </div>
+              {% if provider.status %}
+                <span class="badge rounded-pill text-bg-secondary ms-2">{{ provider.status }}</span>
+              {% endif %}
+            </div>
+            <ul class="list-unstyled small mb-0">
+              {% if provider.address %}
+                <li class="mb-1">
+                  <i class="bi bi-geo-alt text-secondary me-2"></i>
+                  {{ provider.address }}
+                </li>
+              {% endif %}
+              {% if provider.county %}
+                <li class="mb-1">
+                  <i class="bi bi-map text-secondary me-2"></i>{{ provider.county }}
+                  County
+                </li>
+              {% endif %}
+              {% if provider.phone %}
+                <li class="mb-1">
+                  <i class="bi bi-telephone text-secondary me-2"></i>
+                  {{ provider.phone }}
+                </li>
+              {% endif %}
+              {% if provider.email %}
+                <li class="mb-1">
+                  <i class="bi bi-envelope text-secondary me-2"></i>{{ provider.email }}
+                </li>
+              {% endif %}
+              {% if provider.provider_website %}
+                <li class="mb-1">
+                  <i class="bi bi-globe text-secondary me-2"></i>{{ provider.provider_website }}
+                </li>
+              {% endif %}
+              {% if provider.license_number %}
+                <li class="mb-1">
+                  <i class="bi bi-patch-check text-secondary me-2"></i>
+                  License #{{ provider.license_number }}
+                </li>
+              {% endif %}
+              {% if provider.capacity %}
+                <li class="mb-1">
+                  <i class="bi bi-people text-secondary me-2"></i>
+                  Capacity {{ provider.capacity }}
+                </li>
+              {% endif %}
+              {% if provider.administrator %}
+                <li class="mb-1">
+                  <i class="bi bi-person-badge text-secondary me-2"></i>
+                  {{ provider.administrator }}
+                </li>
+              {% endif %}
+              {% if provider.hours %}
+                <li class="mb-1">
+                  <i class="bi bi-clock text-secondary me-2"></i>{{ provider.hours }}
+                </li>
+              {% endif %}
+            </ul>
+            <div class="mt-auto pt-2">
+              {% if provider.license_begin_date or provider.license_expiration %}
+                <div class="text-muted small">
+                  <i class="bi bi-calendar2-week me-1"></i>
+                  {{ provider.license_begin_date|default:"?" }} –
+                  {{ provider.license_expiration|default:"?" }}
+                </div>
+              {% endif %}
+              {% if provider.latitude and provider.longitude %}
+                <div class="text-muted small">
+                  <i class="bi bi-pin-map me-1"></i>{{ provider.latitude }},
+                  {{ provider.longitude }}
+                </div>
+              {% endif %}
+              {% if provider.source_state %}
+                <div class="text-muted small">
+                  <i class="bi bi-flag me-1"></i>{{ provider.source_state }}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-12">
+        {% if selected_state or selected_county %}
+          <p class="text-muted">No providers match your search.</p>
+        {% else %}
+          <p class="text-muted">No providers have been loaded yet.</p>
+        {% endif %}
+      </div>
+    {% endfor %}
   </div>
+  {% if is_paginated %}
+    <nav aria-label="Provider pages" class="mt-4">
+      <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+          <li class="page-item">
+            <a class="page-link"
+               href="{% querystring page=page_obj.previous_page_number %}">Previous</a>
+          </li>
+        {% else %}
+          <li class="page-item disabled">
+            <span class="page-link">Previous</span>
+          </li>
+        {% endif %}
+        <li class="page-item disabled">
+          <span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+        </li>
+        {% if page_obj.has_next %}
+          <li class="page-item">
+            <a class="page-link"
+               href="{% querystring page=page_obj.next_page_number %}">Next</a>
+          </li>
+        {% else %}
+          <li class="page-item disabled">
+            <span class="page-link">Next</span>
+          </li>
+        {% endif %}
+      </ul>
+    </nav>
   {% endif %}
-  <div class="row g-2 align-items-center mt-1">
-    <div class="col-auto">
-      <div class="form-check">
-        <input id="active-check"
-               type="checkbox"
-               name="active"
-               value="1"
-               class="form-check-input"
-               onchange="this.form.submit()"
-               {% if active_only %}checked{% endif %} />
-        <label for="active-check" class="form-check-label">License currently active</label>
-      </div>
-    </div>
-    <div class="col"></div>
-    <div class="col-auto">
-      <button type="submit" class="btn btn-primary">Search</button>
-    </div>
-  </div>
-</form>
-<div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
-  {% for provider in providers %}
-  <div class="col">
-    <div class="card h-100 shadow-sm">
-      <div class="card-body d-flex flex-column">
-        <div class="d-flex justify-content-between align-items-start mb-2">
-          <div>
-            <h2 class="h5 card-title mb-0">
-              <a href="{% url 'providers:detail' provider.pk %}"
-                 class="text-decoration-none stretched-link">
-                {{ provider.provider_name|default:"Unnamed provider" }}
-              </a>
-            </h2>
-            {% if provider.provider_type %}
-            <div class="text-muted small">{{ provider.provider_type }}</div>
-            {% endif %}
-          </div>
-          {% if provider.status %}
-          <span class="badge rounded-pill text-bg-secondary ms-2"
-            >{{ provider.status }}</span
-          >
-          {% endif %}
-        </div>
-        <ul class="list-unstyled small mb-0">
-          {% if provider.address %}
-          <li class="mb-1">
-            <i class="bi bi-geo-alt text-secondary me-2"></i>
-            {{ provider.address }}
-          </li>
-          {% endif %} {% if provider.county %}
-          <li class="mb-1">
-            <i class="bi bi-map text-secondary me-2"></i>{{ provider.county }}
-            County
-          </li>
-          {% endif %} {% if provider.phone %}
-          <li class="mb-1">
-            <i class="bi bi-telephone text-secondary me-2"></i>
-            {{ provider.phone }}
-          </li>
-          {% endif %} {% if provider.email %}
-          <li class="mb-1">
-            <i class="bi bi-envelope text-secondary me-2"></i>{{ provider.email }}
-          </li>
-          {% endif %} {% if provider.provider_website %}
-          <li class="mb-1">
-            <i class="bi bi-globe text-secondary me-2"></i>{{ provider.provider_website }}
-          </li>
-          {% endif %} {% if provider.license_number %}
-          <li class="mb-1">
-            <i class="bi bi-patch-check text-secondary me-2"></i>
-            License #{{ provider.license_number }}
-          </li>
-          {% endif %} {% if provider.capacity %}
-          <li class="mb-1">
-            <i class="bi bi-people text-secondary me-2"></i>
-            Capacity {{ provider.capacity }}
-          </li>
-          {% endif %} {% if provider.administrator %}
-          <li class="mb-1">
-            <i class="bi bi-person-badge text-secondary me-2"></i>
-            {{ provider.administrator }}
-          </li>
-          {% endif %} {% if provider.hours %}
-          <li class="mb-1">
-            <i class="bi bi-clock text-secondary me-2"></i>{{ provider.hours }}
-          </li>
-          {% endif %}
-        </ul>
-        <div class="mt-auto pt-2">
-          {% if provider.license_begin_date or provider.license_expiration %}
-          <div class="text-muted small">
-            <i class="bi bi-calendar2-week me-1"></i>
-            {{ provider.license_begin_date|default:"?" }} –
-            {{ provider.license_expiration|default:"?" }}
-          </div>
-          {% endif %} {% if provider.latitude and provider.longitude %}
-          <div class="text-muted small">
-            <i class="bi bi-pin-map me-1"></i>{{ provider.latitude }},
-            {{ provider.longitude }}
-          </div>
-          {% endif %} {% if provider.source_state %}
-          <div class="text-muted small">
-            <i class="bi bi-flag me-1"></i>{{ provider.source_state }}
-          </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
-  {% empty %}
-  <div class="col-12">
-    {% if selected_state or selected_county %}
-    <p class="text-muted">No providers match your search.</p>
-    {% else %}
-    <p class="text-muted">No providers have been loaded yet.</p>
-    {% endif %}
-  </div>
-  {% endfor %}
-</div>
-{% if is_paginated %}
-<nav aria-label="Provider pages" class="mt-4">
-  <ul class="pagination justify-content-center">
-    {% if page_obj.has_previous %}
-    <li class="page-item">
-      <a class="page-link"
-         href="{% querystring page=page_obj.previous_page_number %}">Previous</a>
-    </li>
-    {% else %}
-    <li class="page-item disabled">
-      <span class="page-link">Previous</span>
-    </li>
-    {% endif %}
-    <li class="page-item disabled">
-      <span class="page-link"
-        >Page {{ page_obj.number }} of {{ paginator.num_pages }}</span
-      >
-    </li>
-    {% if page_obj.has_next %}
-    <li class="page-item">
-      <a class="page-link"
-         href="{% querystring page=page_obj.next_page_number %}">Next</a>
-    </li>
-    {% else %}
-    <li class="page-item disabled">
-      <span class="page-link">Next</span>
-    </li>
-    {% endif %}
-  </ul>
-</nav>
-{% endif %}
 {% endblock content %}

@@ -329,3 +329,135 @@ def test_active_license_filter(client):
 
     names = [provider.provider_name for provider in response.context["providers"]]
     assert names == ["Active"]
+
+
+@pytest.fixture
+def ny_providers(db):
+    Provider.objects.create(
+        provider_name="Albany Infants",
+        source_state="NY",
+        infant="8",
+        toddler="0",
+        capacity="8",
+        state_data={"ny_region_code": "ARO", "ny_school_district_name": "Albany"},
+    )
+    Provider.objects.create(
+        provider_name="Buffalo Mixed",
+        source_state="NY",
+        infant="4",
+        toddler="6",
+        # Thousands separator must still parse as a positive number.
+        capacity="1,100",
+        state_data={"ny_region_code": "BRO", "ny_school_district_name": "Buffalo"},
+    )
+    Provider.objects.create(
+        provider_name="No Capacity",
+        source_state="NY",
+        infant="0",
+        toddler="0",
+        capacity="0",
+        state_data={"ny_region_code": "ARO", "ny_school_district_name": "Albany"},
+    )
+
+
+@pytest.mark.django_db
+def test_ny_filters_only_offered_for_new_york(client, ny_providers):
+    Provider.objects.create(provider_name="SC One", source_state="South Carolina")
+
+    # No state chosen, and a non-NY state: NY options are withheld.
+    assert client.get(reverse("providers:list")).context["ny_regions"] == []
+    in_sc = client.get(reverse("providers:list"), {"state": "South Carolina"})
+    assert in_sc.context["ny_regions"] == []
+    assert in_sc.context["ny_age_buckets"] == []
+
+    in_ny = client.get(reverse("providers:list"), {"state": "NY"})
+    assert in_ny.context["ny_regions"] == ["ARO", "BRO"]
+    assert in_ny.context["ny_districts"] == ["Albany", "Buffalo"]
+    assert in_ny.context["ny_age_buckets"] == [
+        ("infant", "Infant"),
+        ("toddler", "Toddler"),
+        ("preschool", "Preschool"),
+        ("school", "School-age"),
+    ]
+
+
+@pytest.mark.django_db
+def test_ny_region_filter_limits_results(client, ny_providers):
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "NY", "ny_region": "BRO"},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Buffalo Mixed"]
+
+
+@pytest.mark.django_db
+def test_ny_district_filter_limits_results(client, ny_providers):
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "NY", "ny_district": "Albany"},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Albany Infants", "No Capacity"]
+
+
+@pytest.mark.django_db
+def test_ny_age_filter_keeps_only_positive_buckets(client, ny_providers):
+    # Only providers with infant capacity > 0 (No Capacity has infant="0").
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "NY", "ny_age": "infant"},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Albany Infants", "Buffalo Mixed"]
+
+
+@pytest.mark.django_db
+def test_ny_age_multiselect_requires_all_positive(client, ny_providers):
+    # AND semantics: capacity > 0 in *every* selected age group.
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "NY", "ny_age": ["infant", "toddler"]},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Buffalo Mixed"]
+
+
+@pytest.mark.django_db
+def test_ny_age_filter_ignored_for_other_state(client, ny_providers):
+    # The age-group filter is gated on New York; for another state it does nothing.
+    Provider.objects.create(
+        provider_name="SC Infant",
+        source_state="South Carolina",
+        infant="5",
+    )
+
+    response = client.get(
+        reverse("providers:list"),
+        {"state": "South Carolina", "ny_age": "infant"},
+    )
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["SC Infant"]
+
+
+@pytest.mark.django_db
+def test_has_capacity_filter_applies_across_states(client):
+    # Base filter, no state selected: positive capacity only, commas tolerated,
+    # blank/zero excluded.
+    Provider.objects.create(
+        provider_name="Big",
+        source_state="South Carolina",
+        capacity="1,100",
+    )
+    Provider.objects.create(provider_name="Zero", source_state="NY", capacity="0")
+    Provider.objects.create(provider_name="Blank", source_state="NY", capacity="")
+
+    response = client.get(reverse("providers:list"), {"has_capacity": "1"})
+
+    names = [provider.provider_name for provider in response.context["providers"]]
+    assert names == ["Big"]
