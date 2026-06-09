@@ -60,6 +60,7 @@
           <th scope="col">Child</th>
           <th scope="col">Family</th>
           <th scope="col">Status</th>
+          <th scope="col">Assignee</th>
           <th scope="col">Source</th>
           <th scope="col">Created</th>
         </tr>
@@ -68,8 +69,7 @@
         {% for referral in referrals %}
           <tr>
             <td>
-              {# Detail link (referrals:detail) is wired in Task 05. #}
-              {{ referral.child }}
+              <a href="{% url 'referrals:detail' referral.pk %}">{{ referral.child }}</a>
               {% if referral.help_requested %}
                 <span class="badge text-bg-warning ms-1">Needs help</span>
               {% endif %}
@@ -80,8 +80,12 @@
             </td>
             <td>
               <span class="badge text-bg-secondary">{{ referral.get_status_display }}</span>
-              {% if not referral.coordinator %}
-                <span class="badge text-bg-primary ms-1">Unassigned</span>
+            </td>
+            <td>
+              {% if referral.coordinator %}
+                {{ referral.coordinator.name|default:referral.coordinator.email }}
+              {% else %}
+                <span class="badge text-bg-light text-muted">Unassigned</span>
               {% endif %}
             </td>
             <td class="text-muted small">{{ referral.get_source_display }}</td>
@@ -89,7 +93,7 @@
           </tr>
         {% empty %}
           <tr>
-            <td colspan="5" class="text-muted">No referrals match these filters.</td>
+            <td colspan="6" class="text-muted">No referrals match these filters.</td>
           </tr>
         {% endfor %}
       </tbody>

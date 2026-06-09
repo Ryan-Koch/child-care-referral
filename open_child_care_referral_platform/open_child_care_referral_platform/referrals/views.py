@@ -10,13 +10,27 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 from typing import Any
 
+from django.contrib import messages
+from django.shortcuts import get_object_or_404
+from django.shortcuts import redirect
+from django.urls import reverse
+from django.views.decorators.http import require_POST
+from django.views.generic import DetailView
 from django.views.generic import ListView
 
+from open_child_care_referral_platform.providers.models import Provider
+from open_child_care_referral_platform.providers.views import ProviderListView
+from open_child_care_referral_platform.referrals.forms import ReferralNotesForm
+from open_child_care_referral_platform.referrals.forms import ReferralProviderForm
 from open_child_care_referral_platform.referrals.models import Referral
+from open_child_care_referral_platform.referrals.models import ReferralProvider
 from open_child_care_referral_platform.users.mixins import CoordinatorRequiredMixin
+from open_child_care_referral_platform.users.mixins import coordinator_required
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
+    from django.http import HttpRequest
+    from django.http import HttpResponse
 
 # Live, actionable work — the queue's default view when no status is chosen.
 ACTIVE_STATUSES = (
@@ -24,6 +38,30 @@ ACTIVE_STATUSES = (
     Referral.Status.ASSIGNED,
     Referral.Status.IN_PROGRESS,
 )
+
+# A care_schedule range is a [start, end] pair.
+_TIME_RANGE_PARTS = 2
+
+
+def _format_care_schedule(schedule: dict[str, Any]) -> list[tuple[str, list[str]]]:
+    """Turn the raw ``care_schedule`` JSON into ``(day, ["07:30-09:00", ...])``
+    rows for display. Tolerant of odd values; preserves the stored day order."""
+    if not isinstance(schedule, dict):
+        return []
+    rows: list[tuple[str, list[str]]] = []
+    for day, ranges in schedule.items():
+        labels: list[str] = []
+        for time_range in ranges or []:
+            if (
+                isinstance(time_range, (list, tuple))
+                and len(time_range) == _TIME_RANGE_PARTS
+            ):
+                start, end = time_range
+                labels.append(f"{start}-{end}")
+            else:
+                labels.append(str(time_range))
+        rows.append((str(day), labels))
+    return rows
 
 
 class ReferralQueueView(CoordinatorRequiredMixin, ListView):
@@ -71,3 +109,141 @@ class ReferralQueueView(CoordinatorRequiredMixin, ListView):
 
 
 referral_queue_view = ReferralQueueView.as_view()
+
+
+class ReferralDetailView(CoordinatorRequiredMixin, DetailView):
+    model = Referral
+    context_object_name = "referral"
+    template_name = "referrals/referral_detail.html"
+
+    def get_queryset(self) -> QuerySet[Referral]:
+        return Referral.objects.select_related(
+            "child",
+            "child__family",
+            "coordinator",
+        ).prefetch_related("saved_providers__provider", "child__schools")
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        referral = self.object
+        context["care_schedule"] = _format_care_schedule(referral.child.care_schedule)
+        context["status_choices"] = Referral.Status.choices
+        context["provider_status_choices"] = ReferralProvider.Status.choices
+        return context
+
+
+referral_detail_view = ReferralDetailView.as_view()
+
+
+class ReferralProviderSearchView(CoordinatorRequiredMixin, ProviderListView):
+    """Provider search in the context of a referral.
+
+    Reuses all of ``ProviderListView``'s filtering/search; only adds the target
+    referral and the set of already-saved providers so the template can offer an
+    "Add to referral" control (or mark a provider as already added).
+    """
+
+    template_name = "referrals/provider_search.html"
+
+    @cached_property
+    def referral(self) -> Referral:
+        return get_object_or_404(Referral, pk=self.kwargs["pk"])
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        context["referral"] = self.referral
+        context["saved_provider_ids"] = set(
+            self.referral.saved_providers.values_list("provider_id", flat=True),
+        )
+        # Round-tripped through each Add form so the redirect restores filters/page.
+        context["search_qs"] = self.request.GET.urlencode()
+        return context
+
+
+referral_provider_search_view = ReferralProviderSearchView.as_view()
+
+
+def _detail_redirect(referral_pk: int) -> HttpResponse:
+    return redirect("referrals:detail", pk=referral_pk)
+
+
+@require_POST
+@coordinator_required
+def referral_claim_view(request: HttpRequest, pk: int) -> HttpResponse:
+    referral = get_object_or_404(Referral, pk=pk)
+    referral.coordinator_id = request.user.pk
+    referral.status = Referral.Status.ASSIGNED
+    referral.save(update_fields=["coordinator", "status", "modified"])
+    messages.success(request, "Referral assigned to you.")
+    return _detail_redirect(pk)
+
+
+@require_POST
+@coordinator_required
+def referral_set_status_view(request: HttpRequest, pk: int) -> HttpResponse:
+    referral = get_object_or_404(Referral, pk=pk)
+    status = request.POST.get("status", "")
+    if status in Referral.Status.values:
+        referral.status = status
+        referral.save(update_fields=["status", "modified"])
+        messages.success(request, "Status updated.")
+    else:
+        messages.error(request, "That status is not recognized.")
+    return _detail_redirect(pk)
+
+
+@require_POST
+@coordinator_required
+def referral_edit_notes_view(request: HttpRequest, pk: int) -> HttpResponse:
+    referral = get_object_or_404(Referral, pk=pk)
+    form = ReferralNotesForm(request.POST, instance=referral)
+    if form.is_valid():
+        form.save()
+        messages.success(request, "Notes saved.")
+    else:
+        messages.error(request, "Could not save notes.")
+    return _detail_redirect(pk)
+
+
+@require_POST
+@coordinator_required
+def referral_provider_remove_view(request: HttpRequest, pk: int) -> HttpResponse:
+    saved = get_object_or_404(ReferralProvider, pk=pk)
+    referral_pk = saved.referral_id
+    saved.delete()
+    messages.success(request, "Provider removed from the referral.")
+    return _detail_redirect(referral_pk)
+
+
+@require_POST
+@coordinator_required
+def referral_provider_update_view(request: HttpRequest, pk: int) -> HttpResponse:
+    saved = get_object_or_404(ReferralProvider, pk=pk)
+    form = ReferralProviderForm(request.POST, instance=saved)
+    if form.is_valid():
+        form.save()
+        messages.success(request, "Saved provider updated.")
+    else:
+        messages.error(request, "Could not update the saved provider.")
+    return _detail_redirect(saved.referral_id)
+
+
+@require_POST
+@coordinator_required
+def referral_add_provider_view(
+    request: HttpRequest,
+    pk: int,
+    provider_pk: int,
+) -> HttpResponse:
+    referral = get_object_or_404(Referral, pk=pk)
+    provider = get_object_or_404(Provider, pk=provider_pk)
+    ReferralProvider.objects.get_or_create(
+        referral=referral,
+        provider=provider,
+        defaults={"added_by_id": request.user.pk},
+    )
+    messages.success(request, f"Added {provider} to the referral.")
+    # Return to the search with the same filters/page the coordinator was on.
+    base = reverse("referrals:provider_search", kwargs={"pk": pk})
+    next_qs = request.POST.get("next_qs", "")
+    return redirect(f"{base}?{next_qs}" if next_qs else base)

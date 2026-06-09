@@ -80,6 +80,11 @@
             <li class="nav-item">
               <a class="nav-link" href="{% url 'providers:list' %}">Providers</a>
             </li>
+            {% if is_coordinator %}
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'referrals:queue' %}">Referral queue</a>
+              </li>
+            {% endif %}
             {% if request.user.is_authenticated %}
               <li class="nav-item">
                 <a class="nav-link"

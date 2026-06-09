@@ -7,10 +7,48 @@ views live at the app root (Tasks 08-09).
 
 from django.urls import path
 
+from open_child_care_referral_platform.referrals.views import referral_add_provider_view
+from open_child_care_referral_platform.referrals.views import referral_claim_view
+from open_child_care_referral_platform.referrals.views import referral_detail_view
+from open_child_care_referral_platform.referrals.views import referral_edit_notes_view
+from open_child_care_referral_platform.referrals.views import (
+    referral_provider_remove_view,
+)
+from open_child_care_referral_platform.referrals.views import (
+    referral_provider_search_view,
+)
+from open_child_care_referral_platform.referrals.views import (
+    referral_provider_update_view,
+)
 from open_child_care_referral_platform.referrals.views import referral_queue_view
+from open_child_care_referral_platform.referrals.views import referral_set_status_view
 
 app_name = "referrals"
 urlpatterns = [
     path("staff/", referral_queue_view, name="queue"),
-    # detail/actions (Task 05), search (Task 06), family views (Task 09) added later
+    path("staff/<int:pk>/", referral_detail_view, name="detail"),
+    path("staff/<int:pk>/claim/", referral_claim_view, name="claim"),
+    path("staff/<int:pk>/status/", referral_set_status_view, name="set_status"),
+    path("staff/<int:pk>/notes/", referral_edit_notes_view, name="edit_notes"),
+    path(
+        "staff/saved-provider/<int:pk>/remove/",
+        referral_provider_remove_view,
+        name="provider_remove",
+    ),
+    path(
+        "staff/saved-provider/<int:pk>/update/",
+        referral_provider_update_view,
+        name="provider_update",
+    ),
+    path(
+        "staff/<int:pk>/search/",
+        referral_provider_search_view,
+        name="provider_search",
+    ),
+    path(
+        "staff/<int:pk>/add/<int:provider_pk>/",
+        referral_add_provider_view,
+        name="add_provider",
+    ),
+    # family views (Task 09) added later
 ]

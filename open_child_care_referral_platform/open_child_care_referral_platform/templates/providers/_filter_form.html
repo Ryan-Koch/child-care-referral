@@ -1,0 +1,225 @@
+{% comment %}
+Provider search/filter form. Shared by providers/provider_list.html and
+referrals/provider_search.html. Has no explicit ``action`` so it submits (GET)
+to whichever page renders it. All context vars come from ProviderListView
+(and its subclasses).
+{% endcomment %}
+<form method="get" class="card card-body shadow-sm mb-4">
+  <div class="row g-3 mb-3">
+    <div class="col-md-8">
+      <label for="search-input" class="form-label mb-1">Search by name</label>
+      <input id="search-input"
+             type="search"
+             name="q"
+             value="{{ search_query }}"
+             class="form-control"
+             placeholder="Provider name (fuzzy match)…" />
+    </div>
+    <div class="col-md-4">
+      <label for="license-input" class="form-label mb-1">License number</label>
+      <input id="license-input"
+             type="search"
+             name="license_number"
+             value="{{ selected_license_number }}"
+             class="form-control"
+             placeholder="e.g. 716" />
+    </div>
+  </div>
+  <div class="row g-3 align-items-end">
+    <div class="col-12 col-sm-6 col-lg">
+      <label for="state-select" class="form-label mb-1">State</label>
+      <select id="state-select"
+              name="state"
+              class="form-select"
+              onchange="this.form.county.value='';this.form.provider_type.value='';if(this.form.sc_rating){this.form.sc_rating.value='';}if(this.form.sc_program){this.form.sc_program.selectedIndex=-1;}if(this.form.ny_region){this.form.ny_region.value='';}if(this.form.ny_district){this.form.ny_district.value='';}this.form.querySelectorAll('input[name=ny_age]').forEach(function(c){c.checked=false;});if(this.form.va_quality){this.form.va_quality.value='';}if(this.form.va_funding){this.form.va_funding.selectedIndex=-1;}this.form.submit()">
+        <option value="">All states</option>
+        {% for state in states %}
+          <option value="{{ state }}"
+                  {% if state == selected_state %}selected{% endif %}>{{ state }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-sm-6 col-lg">
+      <label for="county-select" class="form-label mb-1">County</label>
+      <select id="county-select"
+              name="county"
+              class="form-select"
+              onchange="this.form.submit()"
+              {% if not counties %}disabled{% endif %}>
+        <option value="">All counties</option>
+        {% for county in counties %}
+          <option value="{{ county }}"
+                  {% if county == selected_county %}selected{% endif %}>{{ county }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-sm-6 col-lg">
+      <label for="type-select" class="form-label mb-1">Provider type</label>
+      <select id="type-select"
+              name="provider_type"
+              class="form-select"
+              onchange="this.form.submit()"
+              {% if not provider_types %}disabled{% endif %}>
+        <option value="">All types</option>
+        {% for provider_type in provider_types %}
+          <option value="{{ provider_type }}"
+                  {% if provider_type == selected_provider_type %}selected{% endif %}>{{ provider_type }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if sc_ratings %}
+      <div class="col-12 col-sm-6 col-lg">
+        <label for="sc-rating-select" class="form-label mb-1">ABC quality rating</label>
+        <select id="sc-rating-select"
+                name="sc_rating"
+                class="form-select"
+                onchange="this.form.submit()">
+          <option value="">All ratings</option>
+          {% for rating in sc_ratings %}
+            <option value="{{ rating }}"
+                    {% if rating == selected_sc_rating %}selected{% endif %}>{{ rating }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+    {% if ny_regions %}
+      <div class="col-12 col-sm-6 col-lg">
+        <label for="ny-region-select" class="form-label mb-1">NY region</label>
+        <select id="ny-region-select"
+                name="ny_region"
+                class="form-select"
+                onchange="this.form.submit()">
+          <option value="">All regions</option>
+          {% for region in ny_regions %}
+            <option value="{{ region }}"
+                    {% if region == selected_ny_region %}selected{% endif %}>{{ region }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+    {% if ny_districts %}
+      <div class="col-12 col-sm-6 col-lg">
+        <label for="ny-district-select" class="form-label mb-1">School district</label>
+        <select id="ny-district-select"
+                name="ny_district"
+                class="form-select"
+                onchange="this.form.submit()">
+          <option value="">All districts</option>
+          {% for district in ny_districts %}
+            <option value="{{ district }}"
+                    {% if district == selected_ny_district %}selected{% endif %}>{{ district }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+    {% if va_quality_ratings %}
+      <div class="col-12 col-sm-6 col-lg">
+        <label for="va-quality-select" class="form-label mb-1">Quality rating</label>
+        <select id="va-quality-select"
+                name="va_quality"
+                class="form-select"
+                onchange="this.form.submit()">
+          <option value="">All ratings</option>
+          {% for rating in va_quality_ratings %}
+            <option value="{{ rating }}"
+                    {% if rating == selected_va_quality %}selected{% endif %}>{{ rating }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+  </div>
+  {% if sc_programs %}
+    <div class="row g-3 mt-1">
+      <div class="col-md-6 col-lg-4">
+        <label for="program-select" class="form-label mb-1">Program participation</label>
+        <select id="program-select"
+                name="sc_program"
+                class="form-select"
+                multiple
+                size="4">
+          {% for program in sc_programs %}
+            <option value="{{ program }}"
+                    {% if program in selected_sc_programs %}selected{% endif %}>{{ program }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">
+          Hold Ctrl/Cmd to select multiple; matches providers in all selected
+          programs.
+        </div>
+      </div>
+    </div>
+  {% endif %}
+  {% if ny_age_buckets %}
+    <div class="row g-3 mt-1">
+      <div class="col-12">
+        <label class="form-label mb-1">Age groups served</label>
+        <div class="d-flex flex-wrap gap-3">
+          {% for value, label in ny_age_buckets %}
+            <div class="form-check">
+              <input id="ny-age-{{ value }}"
+                     type="checkbox"
+                     name="ny_age"
+                     value="{{ value }}"
+                     class="form-check-input"
+                     onchange="this.form.submit()"
+                     {% if value in selected_ny_ages %}checked{% endif %} />
+              <label for="ny-age-{{ value }}" class="form-check-label">{{ label }}</label>
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-text">Keeps providers with capacity above zero in every selected age group.</div>
+      </div>
+    </div>
+  {% endif %}
+  {% if va_fundings %}
+    <div class="row g-3 mt-1">
+      <div class="col-md-6 col-lg-4">
+        <label for="va-funding-select" class="form-label mb-1">Public funding</label>
+        <select id="va-funding-select"
+                name="va_funding"
+                class="form-select"
+                multiple
+                size="4">
+          {% for funding in va_fundings %}
+            <option value="{{ funding }}"
+                    {% if funding in selected_va_funding %}selected{% endif %}>{{ funding }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">
+          Hold Ctrl/Cmd to select multiple; matches providers receiving all
+          selected funding.
+        </div>
+      </div>
+    </div>
+  {% endif %}
+  <div class="row g-2 align-items-center mt-1">
+    <div class="col-auto">
+      <div class="form-check">
+        <input id="active-check"
+               type="checkbox"
+               name="active"
+               value="1"
+               class="form-check-input"
+               onchange="this.form.submit()"
+               {% if active_only %}checked{% endif %} />
+        <label for="active-check" class="form-check-label">License currently active</label>
+      </div>
+    </div>
+    <div class="col-auto">
+      <div class="form-check">
+        <input id="capacity-check"
+               type="checkbox"
+               name="has_capacity"
+               value="1"
+               class="form-check-input"
+               onchange="this.form.submit()"
+               {% if has_capacity %}checked{% endif %} />
+        <label for="capacity-check" class="form-check-label">Has capacity</label>
+      </div>
+    </div>
+    <div class="col"></div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary">Search</button>
+    </div>
+  </div>
+</form>
