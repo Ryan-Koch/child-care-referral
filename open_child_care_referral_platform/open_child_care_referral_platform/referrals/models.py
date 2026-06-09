@@ -93,3 +93,124 @@ class School(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.institution_name or f"School #{self.pk}"
+
+
+class Referral(TimeStampedModel):
+    """A per-child referral worked by a coordinator.
+
+    Targets one :class:`Child`; a family with several children has several
+    referrals. ``coordinator`` is nullable so unassigned referrals surface in the
+    queue (Task 04). Saved providers hang off :class:`ReferralProvider`.
+    """
+
+    class Status(models.TextChoices):
+        NEW = "new", "New"
+        ASSIGNED = "assigned", "Assigned"
+        IN_PROGRESS = "in_progress", "In Progress"
+        COMPLETED = "completed", "Completed"
+        CLOSED = "closed", "Closed"
+
+    class Source(models.TextChoices):
+        INGESTED = "ingested", "Ingested"
+        STAFF = "staff", "Created by staff"
+        FAMILY = "family", "Created by family"
+
+    child = models.ForeignKey(
+        Child,
+        on_delete=models.CASCADE,
+        related_name="referrals",
+    )
+    coordinator = models.ForeignKey(
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="assigned_referrals",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.NEW,
+    )
+    source = models.CharField(
+        max_length=16,
+        choices=Source.choices,
+        default=Source.STAFF,
+    )
+    help_requested = models.BooleanField(default=False)
+    notes = models.TextField(blank=True)
+    # Stable key from the originating system, for idempotent ingestion (Task 07).
+    # Blank for in-app referrals; unique only when set (see Meta constraint).
+    external_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+    )
+    providers = models.ManyToManyField(  # type: ignore[var-annotated]
+        "providers.Provider",
+        through="ReferralProvider",
+        related_name="referrals",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["external_id"],
+                condition=~models.Q(external_id=""),
+                name="uniq_referral_external_id_when_set",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Referral for {self.child} ({self.status})"
+
+
+class ReferralProvider(TimeStampedModel):
+    """One saved provider on a referral, with per-item status and notes.
+
+    The explicit ``through`` model for ``Referral.providers``. Add rows with
+    ``ReferralProvider.objects.get_or_create(...)`` — ``referral.providers.add()``
+    is unavailable with a custom through model.
+    """
+
+    class Status(models.TextChoices):
+        SUGGESTED = "suggested", "Suggested"
+        SHARED = "shared", "Shared with family"
+        SELECTED = "selected", "Selected"
+        DECLINED = "declined", "Declined"
+
+    referral = models.ForeignKey(
+        Referral,
+        on_delete=models.CASCADE,
+        related_name="saved_providers",
+    )
+    provider = models.ForeignKey(
+        "providers.Provider",
+        on_delete=models.CASCADE,
+        related_name="referral_links",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.SUGGESTED,
+    )
+    notes = models.TextField(blank=True)
+    added_by = models.ForeignKey(
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="saved_referral_providers",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["referral", "provider"],
+                name="uniq_referral_provider",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.provider} on referral #{self.referral_id}"

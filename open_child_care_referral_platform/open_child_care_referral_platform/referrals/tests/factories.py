@@ -4,7 +4,10 @@ from factory import Faker
 from factory import SubFactory
 from factory.django import DjangoModelFactory
 
+from open_child_care_referral_platform.providers.tests.factories import ProviderFactory
 from open_child_care_referral_platform.referrals.models import Child
+from open_child_care_referral_platform.referrals.models import Referral
+from open_child_care_referral_platform.referrals.models import ReferralProvider
 from open_child_care_referral_platform.referrals.models import School
 from open_child_care_referral_platform.users.tests.factories import UserFactory
 
@@ -27,3 +30,18 @@ class SchoolFactory(DjangoModelFactory[School]):
 
     class Meta:
         model = School
+
+
+class ReferralFactory(DjangoModelFactory[Referral]):
+    child = SubFactory(ChildFactory)
+
+    class Meta:
+        model = Referral
+
+
+class ReferralProviderFactory(DjangoModelFactory[ReferralProvider]):
+    referral = SubFactory(ReferralFactory)
+    provider = SubFactory(ProviderFactory)
+
+    class Meta:
+        model = ReferralProvider
