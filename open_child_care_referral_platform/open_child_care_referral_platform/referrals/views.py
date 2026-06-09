@@ -6,14 +6,20 @@ Task 04 adds the coordinator referral queue. Further coordinator views
 
 from __future__ import annotations
 
+import json
+import secrets
 from functools import cached_property
+from http import HTTPStatus
 from typing import TYPE_CHECKING
 from typing import Any
 
+from django.conf import settings
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView
 from django.views.generic import ListView
@@ -24,6 +30,7 @@ from open_child_care_referral_platform.referrals.forms import ReferralNotesForm
 from open_child_care_referral_platform.referrals.forms import ReferralProviderForm
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
+from open_child_care_referral_platform.referrals.services import ingest_referral_request
 from open_child_care_referral_platform.users.mixins import CoordinatorRequiredMixin
 from open_child_care_referral_platform.users.mixins import coordinator_required
 
@@ -247,3 +254,23 @@ def referral_add_provider_view(
     base = reverse("referrals:provider_search", kwargs={"pk": pk})
     next_qs = request.POST.get("next_qs", "")
     return redirect(f"{base}?{next_qs}" if next_qs else base)
+
+
+@csrf_exempt
+@require_POST
+def referral_ingest_view(request: HttpRequest) -> HttpResponse:
+    """Server-to-server ingestion endpoint (token-authenticated, no session)."""
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    expected = settings.REFERRAL_INGEST_TOKEN
+    # An unset token must reject everything — never an open endpoint by default.
+    if not expected or not secrets.compare_digest(token, expected):
+        return JsonResponse({"detail": "unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+    try:
+        payload = json.loads(request.body)
+        referrals = ingest_referral_request(payload)
+    except (json.JSONDecodeError, ValueError, KeyError) as exc:
+        return JsonResponse({"detail": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+    return JsonResponse(
+        {"referral_ids": [referral.id for referral in referrals]},
+        status=HTTPStatus.CREATED,
+    )

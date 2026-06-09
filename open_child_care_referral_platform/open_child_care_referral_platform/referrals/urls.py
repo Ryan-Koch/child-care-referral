@@ -11,6 +11,7 @@ from open_child_care_referral_platform.referrals.views import referral_add_provi
 from open_child_care_referral_platform.referrals.views import referral_claim_view
 from open_child_care_referral_platform.referrals.views import referral_detail_view
 from open_child_care_referral_platform.referrals.views import referral_edit_notes_view
+from open_child_care_referral_platform.referrals.views import referral_ingest_view
 from open_child_care_referral_platform.referrals.views import (
     referral_provider_remove_view,
 )
@@ -50,5 +51,7 @@ urlpatterns = [
         referral_add_provider_view,
         name="add_provider",
     ),
+    # Server-to-server ingestion (token-authed; outside the staff/ session tree).
+    path("ingest/", referral_ingest_view, name="ingest"),
     # family views (Task 09) added later
 ]

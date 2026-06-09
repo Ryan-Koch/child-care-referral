@@ -294,3 +294,6 @@ SOCIALACCOUNT_FORMS = {
 
 # Your stuff...
 # ------------------------------------------------------------------------------
+# Shared secret for the server-to-server referral ingestion endpoint
+# (referrals:ingest). Empty by default, which rejects all ingest requests.
+REFERRAL_INGEST_TOKEN = env("REFERRAL_INGEST_TOKEN", default="")
