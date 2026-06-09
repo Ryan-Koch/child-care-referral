@@ -86,6 +86,17 @@
               <i class="bi bi-telephone text-secondary me-1"></i>{{ referral.child.family.phone }}
             </div>
           {% endif %}
+          <div class="mt-3">
+            {% if referral.child.family.has_usable_password %}
+              <span class="badge text-bg-success">Account active</span>
+            {% else %}
+              <form method="post"
+                    action="{% url 'referrals:invite_family' referral.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-primary">Send account-claim email</button>
+              </form>
+            {% endif %}
+          </div>
         </div>
       </div>
     </div>

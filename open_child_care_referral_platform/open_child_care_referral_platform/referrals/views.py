@@ -23,6 +23,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView
 from django.views.generic import ListView
+from django.views.generic import TemplateView
 
 from open_child_care_referral_platform.providers.models import Provider
 from open_child_care_referral_platform.providers.views import ProviderListView
@@ -31,7 +32,9 @@ from open_child_care_referral_platform.referrals.forms import ReferralProviderFo
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
 from open_child_care_referral_platform.referrals.services import ingest_referral_request
+from open_child_care_referral_platform.users.claims import send_account_claim_email
 from open_child_care_referral_platform.users.mixins import CoordinatorRequiredMixin
+from open_child_care_referral_platform.users.mixins import FamilyRequiredMixin
 from open_child_care_referral_platform.users.mixins import coordinator_required
 
 if TYPE_CHECKING:
@@ -116,6 +119,15 @@ class ReferralQueueView(CoordinatorRequiredMixin, ListView):
 
 
 referral_queue_view = ReferralQueueView.as_view()
+
+
+class PortalView(FamilyRequiredMixin, TemplateView):
+    """Family front-office landing page. Content filled in by Task 09."""
+
+    template_name = "referrals/portal.html"
+
+
+portal_view = PortalView.as_view()
 
 
 class ReferralDetailView(CoordinatorRequiredMixin, DetailView):
@@ -209,6 +221,21 @@ def referral_edit_notes_view(request: HttpRequest, pk: int) -> HttpResponse:
         messages.success(request, "Notes saved.")
     else:
         messages.error(request, "Could not save notes.")
+    return _detail_redirect(pk)
+
+
+@require_POST
+@coordinator_required
+def referral_invite_family_view(request: HttpRequest, pk: int) -> HttpResponse:
+    referral = get_object_or_404(
+        Referral.objects.select_related("child__family"),
+        pk=pk,
+    )
+    family = referral.child.family
+    if send_account_claim_email(family, request):
+        messages.success(request, f"Sent an account-claim email to {family.email}.")
+    else:
+        messages.error(request, "Could not send the account-claim email.")
     return _detail_redirect(pk)
 
 

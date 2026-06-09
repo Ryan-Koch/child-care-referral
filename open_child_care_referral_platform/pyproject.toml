@@ -142,6 +142,10 @@ lint.per-file-ignores."**/providers/models.py" = [
   "DJ001",
 ]
 
+lint.per-file-ignores."**/apps.py" = [
+  "PLC0415",
+]
+
 # ==== pyproject-fmt ====
 [tool.pyproject-fmt]
 keep_full_version = true

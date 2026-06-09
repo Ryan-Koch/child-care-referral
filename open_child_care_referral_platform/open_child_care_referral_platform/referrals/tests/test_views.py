@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from django.contrib.auth.models import Group
+from django.core import mail
 from django.urls import reverse
 
 from open_child_care_referral_platform.providers.tests.factories import ProviderFactory
@@ -359,3 +360,53 @@ def test_nav_hides_queue_link_for_family(client) -> None:
     client.force_login(make_family())
     response = client.get(reverse("providers:list"))
     assert reverse("referrals:queue") not in response.content.decode()
+
+
+# --- family portal + claim invite -----------------------------------------
+
+
+@pytest.mark.django_db
+def test_portal_allows_family(client) -> None:
+    client.force_login(make_family())
+    response = client.get(reverse("referrals:portal"))
+    assert response.status_code == HTTPStatus.OK
+
+
+@pytest.mark.django_db
+def test_portal_forbids_coordinator(client) -> None:
+    client.force_login(make_coordinator())
+    response = client.get(reverse("referrals:portal"))
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_portal_redirects_anonymous(client) -> None:
+    response = client.get(reverse("referrals:portal"))
+    assert response.status_code == HTTPStatus.FOUND
+
+
+@pytest.mark.django_db
+def test_invite_family_sends_claim_email(client) -> None:
+    client.force_login(make_coordinator())
+    referral = ReferralFactory.create()
+    referral.child.family.set_unusable_password()
+    referral.child.family.save()
+
+    response = client.post(
+        reverse("referrals:invite_family", kwargs={"pk": referral.pk}),
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert len(mail.outbox) == 1
+    assert referral.child.family.email in mail.outbox[0].to
+
+
+@pytest.mark.django_db
+def test_invite_family_rejects_non_coordinator(client) -> None:
+    client.force_login(make_family())
+    referral = ReferralFactory.create()
+    response = client.post(
+        reverse("referrals:invite_family", kwargs={"pk": referral.pk}),
+    )
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert not mail.outbox

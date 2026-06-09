@@ -7,11 +7,15 @@ views live at the app root (Tasks 08-09).
 
 from django.urls import path
 
+from open_child_care_referral_platform.referrals.views import portal_view
 from open_child_care_referral_platform.referrals.views import referral_add_provider_view
 from open_child_care_referral_platform.referrals.views import referral_claim_view
 from open_child_care_referral_platform.referrals.views import referral_detail_view
 from open_child_care_referral_platform.referrals.views import referral_edit_notes_view
 from open_child_care_referral_platform.referrals.views import referral_ingest_view
+from open_child_care_referral_platform.referrals.views import (
+    referral_invite_family_view,
+)
 from open_child_care_referral_platform.referrals.views import (
     referral_provider_remove_view,
 )
@@ -26,11 +30,18 @@ from open_child_care_referral_platform.referrals.views import referral_set_statu
 
 app_name = "referrals"
 urlpatterns = [
+    # Family front office (portal) at the app root.
+    path("", portal_view, name="portal"),
     path("staff/", referral_queue_view, name="queue"),
     path("staff/<int:pk>/", referral_detail_view, name="detail"),
     path("staff/<int:pk>/claim/", referral_claim_view, name="claim"),
     path("staff/<int:pk>/status/", referral_set_status_view, name="set_status"),
     path("staff/<int:pk>/notes/", referral_edit_notes_view, name="edit_notes"),
+    path(
+        "staff/<int:pk>/invite/",
+        referral_invite_family_view,
+        name="invite_family",
+    ),
     path(
         "staff/saved-provider/<int:pk>/remove/",
         referral_provider_remove_view,
