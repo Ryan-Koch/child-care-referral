@@ -7,6 +7,12 @@ views live at the app root (Tasks 08-09).
 
 from django.urls import path
 
+from open_child_care_referral_platform.referrals.views import family_add_provider_view
+from open_child_care_referral_platform.referrals.views import (
+    family_provider_search_view,
+)
+from open_child_care_referral_platform.referrals.views import family_request_help_view
+from open_child_care_referral_platform.referrals.views import my_referrals_view
 from open_child_care_referral_platform.referrals.views import portal_view
 from open_child_care_referral_platform.referrals.views import referral_add_provider_view
 from open_child_care_referral_platform.referrals.views import referral_claim_view
@@ -30,8 +36,24 @@ from open_child_care_referral_platform.referrals.views import referral_set_statu
 
 app_name = "referrals"
 urlpatterns = [
-    # Family front office (portal) at the app root.
+    # Family front office (portal + saved providers) at the app root.
     path("", portal_view, name="portal"),
+    path("my/", my_referrals_view, name="my_referrals"),
+    path(
+        "my/child/<int:child_pk>/search/",
+        family_provider_search_view,
+        name="family_search",
+    ),
+    path(
+        "my/child/<int:child_pk>/add/<int:provider_pk>/",
+        family_add_provider_view,
+        name="family_add_provider",
+    ),
+    path(
+        "my/referral/<int:referral_pk>/request-help/",
+        family_request_help_view,
+        name="request_help",
+    ),
     path("staff/", referral_queue_view, name="queue"),
     path("staff/<int:pk>/", referral_detail_view, name="detail"),
     path("staff/<int:pk>/claim/", referral_claim_view, name="claim"),

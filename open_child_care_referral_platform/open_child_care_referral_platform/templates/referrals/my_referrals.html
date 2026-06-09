@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Your saved providers
+{% endblock title %}
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Your children &amp; saved providers</h1>
+    <a href="{% url 'referrals:portal' %}"
+       class="btn btn-sm btn-outline-secondary">Portal home</a>
+  </div>
+  {% for child in children %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">{{ child }}</span>
+        <a href="{% url 'referrals:family_search' child.pk %}"
+           class="btn btn-sm btn-primary">Find providers</a>
+      </div>
+      <div class="card-body">
+        {% for referral in child.referrals.all %}
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="badge text-bg-secondary">{{ referral.get_status_display }}</span>
+              {% if referral.help_requested %}
+                <span class="badge text-bg-warning">Help requested</span>
+              {% else %}
+                <form method="post" action="{% url 'referrals:request_help' referral.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-primary">Request coordinator help</button>
+                </form>
+              {% endif %}
+            </div>
+            <ul class="list-unstyled mb-0">
+              {% for saved in referral.saved_providers.all %}
+                <li class="mb-2">
+                  <a href="{% url 'providers:detail' saved.provider.pk %}">{{ saved.provider }}</a>
+                  <span class="badge text-bg-light text-muted ms-1">{{ saved.get_status_display }}</span>
+                  {% if saved.notes %}
+                    <div class="text-muted small">{{ saved.notes }}</div>
+                  {% endif %}
+                </li>
+              {% empty %}
+                <li class="text-muted">No providers saved on this referral yet.</li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% empty %}
+          <p class="text-muted mb-0">No referral yet — use "Find providers" to start saving.</p>
+        {% endfor %}
+      </div>
+    </div>
+  {% empty %}
+    <div class="alert alert-info" role="alert">No children are on file for your account yet.</div>
+  {% endfor %}
+{% endblock content %}

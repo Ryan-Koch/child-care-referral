@@ -29,6 +29,7 @@ from open_child_care_referral_platform.providers.models import Provider
 from open_child_care_referral_platform.providers.views import ProviderListView
 from open_child_care_referral_platform.referrals.forms import ReferralNotesForm
 from open_child_care_referral_platform.referrals.forms import ReferralProviderForm
+from open_child_care_referral_platform.referrals.models import Child
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
 from open_child_care_referral_platform.referrals.services import ingest_referral_request
@@ -36,6 +37,7 @@ from open_child_care_referral_platform.users.claims import send_account_claim_em
 from open_child_care_referral_platform.users.mixins import CoordinatorRequiredMixin
 from open_child_care_referral_platform.users.mixins import FamilyRequiredMixin
 from open_child_care_referral_platform.users.mixins import coordinator_required
+from open_child_care_referral_platform.users.mixins import family_required
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -72,6 +74,16 @@ def _format_care_schedule(schedule: dict[str, Any]) -> list[tuple[str, list[str]
                 labels.append(str(time_range))
         rows.append((str(day), labels))
     return rows
+
+
+def family_children(user) -> QuerySet[Child]:
+    """Children owned by ``user`` — the basis for family ownership scoping."""
+    return Child.objects.filter(family=user)
+
+
+def family_referrals(user) -> QuerySet[Referral]:
+    """Referrals for ``user``'s children."""
+    return Referral.objects.filter(child__family=user)
 
 
 class ReferralQueueView(CoordinatorRequiredMixin, ListView):
@@ -128,6 +140,49 @@ class PortalView(FamilyRequiredMixin, TemplateView):
 
 
 portal_view = PortalView.as_view()
+
+
+class MyReferralsView(FamilyRequiredMixin, TemplateView):
+    """The family's own children, referrals, and saved providers (View #2)."""
+
+    template_name = "referrals/my_referrals.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        context["children"] = family_children(self.request.user).prefetch_related(
+            "referrals__saved_providers__provider",
+        )
+        return context
+
+
+my_referrals_view = MyReferralsView.as_view()
+
+
+class FamilyProviderSearchView(FamilyRequiredMixin, ProviderListView):
+    """Provider search scoped to one of the family's own children."""
+
+    template_name = "referrals/family_provider_search.html"
+
+    @cached_property
+    def child(self) -> Child:
+        return get_object_or_404(
+            family_children(self.request.user),
+            pk=self.kwargs["child_pk"],
+        )
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        context["child"] = self.child
+        context["saved_provider_ids"] = set(
+            ReferralProvider.objects.filter(
+                referral__child=self.child,
+            ).values_list("provider_id", flat=True),
+        )
+        context["search_qs"] = self.request.GET.urlencode()
+        return context
+
+
+family_provider_search_view = FamilyProviderSearchView.as_view()
 
 
 class ReferralDetailView(CoordinatorRequiredMixin, DetailView):
@@ -301,3 +356,44 @@ def referral_ingest_view(request: HttpRequest) -> HttpResponse:
         {"referral_ids": [referral.id for referral in referrals]},
         status=HTTPStatus.CREATED,
     )
+
+
+@require_POST
+@family_required
+def family_add_provider_view(
+    request: HttpRequest,
+    child_pk: int,
+    provider_pk: int,
+) -> HttpResponse:
+    child = get_object_or_404(family_children(request.user), pk=child_pk)
+    provider = get_object_or_404(Provider, pk=provider_pk)
+    # Add to the child's existing referral, or start a family-created one.
+    referral = family_referrals(request.user).filter(child=child).first()
+    if referral is None:
+        referral = Referral.objects.create(
+            child=child,
+            source=Referral.Source.FAMILY,
+            status=Referral.Status.NEW,
+        )
+    ReferralProvider.objects.get_or_create(
+        referral=referral,
+        provider=provider,
+        defaults={"added_by_id": request.user.pk},
+    )
+    messages.success(request, f"Saved {provider}.")
+    base = reverse("referrals:family_search", kwargs={"child_pk": child_pk})
+    next_qs = request.POST.get("next_qs", "")
+    return redirect(f"{base}?{next_qs}" if next_qs else base)
+
+
+@require_POST
+@family_required
+def family_request_help_view(request: HttpRequest, referral_pk: int) -> HttpResponse:
+    referral = get_object_or_404(family_referrals(request.user), pk=referral_pk)
+    referral.help_requested = True
+    referral.save(update_fields=["help_requested", "modified"])
+    messages.success(
+        request,
+        "We've let a coordinator know you'd like help with this referral.",
+    )
+    return redirect("referrals:my_referrals")

@@ -50,20 +50,32 @@ class FamilyRequiredMixin(_GroupRequiredMixin):
     group_name = FAMILY_GROUP
 
 
-def coordinator_required(
-    view_func: Callable[..., HttpResponseBase],
-) -> Callable[..., HttpResponseBase]:
-    """Function-view counterpart of :class:`CoordinatorRequiredMixin`."""
+def _require_group(
+    group_name: str,
+) -> Callable[[Callable[..., HttpResponseBase]], Callable[..., HttpResponseBase]]:
+    """Build a function-view decorator gating on membership of ``group_name``."""
 
-    @wraps(view_func)
-    def wrapped(request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponseBase:
-        user = request.user
-        if not user.is_authenticated:
-            return redirect_to_login(request.get_full_path())
-        if not (
-            user.is_superuser or user.groups.filter(name=COORDINATOR_GROUP).exists()
-        ):
-            raise PermissionDenied
-        return view_func(request, *args, **kwargs)
+    def decorator(
+        view_func: Callable[..., HttpResponseBase],
+    ) -> Callable[..., HttpResponseBase]:
+        @wraps(view_func)
+        def wrapped(
+            request: HttpRequest,
+            *args: Any,
+            **kwargs: Any,
+        ) -> HttpResponseBase:
+            user = request.user
+            if not user.is_authenticated:
+                return redirect_to_login(request.get_full_path())
+            if not (user.is_superuser or user.groups.filter(name=group_name).exists()):
+                raise PermissionDenied
+            return view_func(request, *args, **kwargs)
 
-    return wrapped
+        return wrapped
+
+    return decorator
+
+
+# Function-view counterparts of the mixins above.
+coordinator_required = _require_group(COORDINATOR_GROUP)
+family_required = _require_group(FAMILY_GROUP)

@@ -11,6 +11,7 @@ from django.urls import reverse
 from open_child_care_referral_platform.providers.tests.factories import ProviderFactory
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
+from open_child_care_referral_platform.referrals.tests.factories import ChildFactory
 from open_child_care_referral_platform.referrals.tests.factories import ReferralFactory
 from open_child_care_referral_platform.referrals.tests.factories import (
     ReferralProviderFactory,
@@ -343,6 +344,8 @@ def test_search_card_links_to_provider_detail(client) -> None:
     content = response.content.decode()
     assert reverse("providers:detail", kwargs={"pk": provider.pk}) in content
     assert "View details" in content
+    # "View details" carries a back link to this search (with filters).
+    assert "?next=" in content
 
 
 # --- navigation -----------------------------------------------------------
@@ -360,6 +363,20 @@ def test_nav_hides_queue_link_for_family(client) -> None:
     client.force_login(make_family())
     response = client.get(reverse("providers:list"))
     assert reverse("referrals:queue") not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_nav_shows_my_providers_link_for_family(client) -> None:
+    client.force_login(make_family())
+    response = client.get(reverse("providers:list"))
+    assert reverse("referrals:my_referrals") in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_nav_hides_my_providers_link_for_coordinator(client) -> None:
+    client.force_login(make_coordinator())
+    response = client.get(reverse("providers:list"))
+    assert reverse("referrals:my_referrals") not in response.content.decode()
 
 
 # --- family portal + claim invite -----------------------------------------
@@ -410,3 +427,166 @@ def test_invite_family_rejects_non_coordinator(client) -> None:
     )
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert not mail.outbox
+
+
+# --- family saved providers (View #2) -------------------------------------
+
+
+def _family_add_url(child_pk: int, provider_pk: int) -> str:
+    return reverse(
+        "referrals:family_add_provider",
+        kwargs={"child_pk": child_pk, "provider_pk": provider_pk},
+    )
+
+
+@pytest.mark.django_db
+def test_my_referrals_shows_only_own_children(client) -> None:
+    fam = make_family()
+    other = make_family()
+    client.force_login(fam)
+    ChildFactory.create(family=fam, first_name="Mine", last_name="Kid")
+    ChildFactory.create(family=other, first_name="Theirs", last_name="Kid")
+
+    content = client.get(reverse("referrals:my_referrals")).content.decode()
+
+    assert "Mine Kid" in content
+    assert "Theirs Kid" not in content
+
+
+@pytest.mark.django_db
+def test_my_referrals_forbids_coordinator(client) -> None:
+    client.force_login(make_coordinator())
+    response = client.get(reverse("referrals:my_referrals"))
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_family_search_filters_and_marks_saved(client) -> None:
+    fam = make_family()
+    client.force_login(fam)
+    child = ChildFactory.create(family=fam)
+    ohio = ProviderFactory.create(provider_name="Sunshine OH", source_state="OH")
+    virginia = ProviderFactory.create(provider_name="Bluebird VA", source_state="VA")
+    referral = ReferralFactory.create(child=child)
+    ReferralProvider.objects.create(referral=referral, provider=ohio)
+
+    url = reverse("referrals:family_search", kwargs={"child_pk": child.pk})
+    response = client.get(url, {"state": "OH"})
+
+    providers = list(response.context["providers"])
+    assert ohio in providers
+    assert virginia not in providers
+    assert ohio.id in response.context["saved_provider_ids"]
+    assert response.context["child"] == child
+
+
+@pytest.mark.django_db
+def test_family_search_404_for_other_familys_child(client) -> None:
+    fam = make_family()
+    other = make_family()
+    client.force_login(fam)
+    other_child = ChildFactory.create(family=other)
+    url = reverse("referrals:family_search", kwargs={"child_pk": other_child.pk})
+    assert client.get(url).status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.django_db
+def test_family_add_provider_creates_family_referral(client) -> None:
+    fam = make_family()
+    client.force_login(fam)
+    child = ChildFactory.create(family=fam)  # no referral yet
+    provider = ProviderFactory.create()
+
+    response = client.post(
+        _family_add_url(child.pk, provider.pk),
+        {"next_qs": "state=OH"},
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    referral = Referral.objects.get(child=child)
+    assert referral.source == Referral.Source.FAMILY
+    link = ReferralProvider.objects.get(referral=referral, provider=provider)
+    assert link.added_by == fam
+
+
+@pytest.mark.django_db
+def test_family_add_provider_uses_existing_referral(client) -> None:
+    fam = make_family()
+    client.force_login(fam)
+    child = ChildFactory.create(family=fam)
+    existing = ReferralFactory.create(child=child, source=Referral.Source.STAFF)
+    provider = ProviderFactory.create()
+
+    client.post(_family_add_url(child.pk, provider.pk), {"next_qs": ""})
+
+    assert Referral.objects.filter(child=child).count() == 1
+    assert ReferralProvider.objects.filter(
+        referral=existing,
+        provider=provider,
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_family_add_provider_404_for_other_familys_child(client) -> None:
+    fam = make_family()
+    other = make_family()
+    client.force_login(fam)
+    other_child = ChildFactory.create(family=other)
+    provider = ProviderFactory.create()
+
+    response = client.post(
+        _family_add_url(other_child.pk, provider.pk),
+        {"next_qs": ""},
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert not ReferralProvider.objects.filter(provider=provider).exists()
+
+
+@pytest.mark.django_db
+def test_family_add_provider_rejects_coordinator(client) -> None:
+    client.force_login(make_coordinator())
+    fam = make_family()
+    child = ChildFactory.create(family=fam)
+    provider = ProviderFactory.create()
+
+    response = client.post(_family_add_url(child.pk, provider.pk), {"next_qs": ""})
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_request_help_flags_and_surfaces_in_queue(client) -> None:
+    fam = make_family()
+    coordinator = make_coordinator()
+    child = ChildFactory.create(family=fam)
+    referral = ReferralFactory.create(child=child, status=Referral.Status.NEW)
+
+    client.force_login(fam)
+    response = client.post(
+        reverse("referrals:request_help", kwargs={"referral_pk": referral.pk}),
+    )
+    assert response.status_code == HTTPStatus.FOUND
+    referral.refresh_from_db()
+    assert referral.help_requested is True
+
+    client.force_login(coordinator)
+    queue = client.get(reverse("referrals:queue"), {"help": "1"})
+    assert referral in list(queue.context["referrals"])
+
+
+@pytest.mark.django_db
+def test_request_help_404_for_other_familys_referral(client) -> None:
+    fam = make_family()
+    other = make_family()
+    client.force_login(fam)
+    other_child = ChildFactory.create(family=other)
+    referral = ReferralFactory.create(child=other_child)
+
+    response = client.post(
+        reverse("referrals:request_help", kwargs={"referral_pk": referral.pk}),
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    referral.refresh_from_db()
+    assert referral.help_requested is False
