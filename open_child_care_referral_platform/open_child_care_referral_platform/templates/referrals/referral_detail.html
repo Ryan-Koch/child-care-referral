@@ -193,6 +193,19 @@
       {% endfor %}
     </div>
   </div>
+  <div class="card shadow-sm mb-4" id="messages">
+    <div class="card-header fw-semibold">Messages with the family</div>
+    <div class="card-body">
+      {% include "referrals/_message_thread.html" %}
+      <form method="post"
+            action="{% url 'referrals:message_post' referral.pk %}"
+            class="mt-3">
+        {% csrf_token %}
+        {{ message_form.body }}
+        <button type="submit" class="btn btn-sm btn-primary mt-2">Send message</button>
+      </form>
+    </div>
+  </div>
   <div class="text-muted small">
     Referral #{{ referral.pk }} · created {{ referral.created|date:"Y-m-d" }} · updated
     {{ referral.modified|date:"Y-m-d" }}

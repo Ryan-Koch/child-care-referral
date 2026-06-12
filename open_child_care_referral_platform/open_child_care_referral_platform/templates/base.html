@@ -87,7 +87,11 @@
             {% endif %}
             {% if is_family %}
               <li class="nav-item">
-                <a class="nav-link" href="{% url 'referrals:my_referrals' %}">My providers</a>
+                <a class="nav-link" href="{% url 'referrals:my_referrals' %}">My providers
+                  {% if unread_message_count %}
+                    <span class="badge text-bg-danger">{{ unread_message_count }}</span>
+                  {% endif %}
+                </a>
               </li>
             {% endif %}
             {% if request.user.is_authenticated %}

@@ -8,6 +8,8 @@ views live at the app root (Tasks 08-09).
 from django.urls import path
 
 from open_child_care_referral_platform.referrals.views import family_add_provider_view
+from open_child_care_referral_platform.referrals.views import family_message_post_view
+from open_child_care_referral_platform.referrals.views import family_messages_view
 from open_child_care_referral_platform.referrals.views import (
     family_provider_search_view,
 )
@@ -22,6 +24,7 @@ from open_child_care_referral_platform.referrals.views import referral_ingest_vi
 from open_child_care_referral_platform.referrals.views import (
     referral_invite_family_view,
 )
+from open_child_care_referral_platform.referrals.views import referral_message_post_view
 from open_child_care_referral_platform.referrals.views import (
     referral_provider_remove_view,
 )
@@ -54,6 +57,16 @@ urlpatterns = [
         family_request_help_view,
         name="request_help",
     ),
+    path(
+        "my/referral/<int:referral_pk>/messages/",
+        family_messages_view,
+        name="family_messages",
+    ),
+    path(
+        "my/referral/<int:referral_pk>/message/",
+        family_message_post_view,
+        name="family_message_post",
+    ),
     path("staff/", referral_queue_view, name="queue"),
     path("staff/<int:pk>/", referral_detail_view, name="detail"),
     path("staff/<int:pk>/claim/", referral_claim_view, name="claim"),
@@ -83,6 +96,11 @@ urlpatterns = [
         "staff/<int:pk>/add/<int:provider_pk>/",
         referral_add_provider_view,
         name="add_provider",
+    ),
+    path(
+        "staff/<int:pk>/message/",
+        referral_message_post_view,
+        name="message_post",
     ),
     # Server-to-server ingestion (token-authed; outside the staff/ session tree).
     path("ingest/", referral_ingest_view, name="ingest"),

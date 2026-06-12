@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from open_child_care_referral_platform.referrals.models import Child
+from open_child_care_referral_platform.referrals.models import Message
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
 from open_child_care_referral_platform.referrals.models import School
@@ -55,3 +56,11 @@ class ReferralProviderAdmin(admin.ModelAdmin):
     list_display = ("id", "referral", "provider", "status", "added_by")
     list_filter = ("status",)
     raw_id_fields = ("referral", "provider", "added_by")
+
+
+@admin.register(Message)
+class MessageAdmin(admin.ModelAdmin):
+    list_display = ("id", "referral", "sender", "created", "read_at")
+    list_filter = ("read_at",)
+    search_fields = ("body", "sender__email")
+    raw_id_fields = ("referral", "sender")

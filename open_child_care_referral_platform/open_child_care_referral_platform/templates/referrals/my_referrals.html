@@ -20,7 +20,16 @@
         {% for referral in child.referrals.all %}
           <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="badge text-bg-secondary">{{ referral.get_status_display }}</span>
+              <div>
+                <span class="badge text-bg-secondary">{{ referral.get_status_display }}</span>
+                <a href="{% url 'referrals:family_messages' referral.pk %}"
+                   class="btn btn-sm btn-outline-secondary ms-1">
+                  Messages
+                  {% if referral.unread_coordinator_messages %}
+                    <span class="badge text-bg-danger">{{ referral.unread_coordinator_messages }}</span>
+                  {% endif %}
+                </a>
+              </div>
               {% if referral.help_requested %}
                 <span class="badge text-bg-warning">Help requested</span>
               {% else %}
