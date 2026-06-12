@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Your portal
+{% endblock title %}
+{% block content %}
+  <div class="py-4">
+    <h1 class="h3 mb-3">Welcome to your portal</h1>
+    <p class="text-muted">
+      This is your family portal. See the providers saved for your family and
+      search the catalog for more.
+    </p>
+    <a href="{% url 'referrals:my_referrals' %}" class="btn btn-primary">View your saved providers</a>
+  </div>
+{% endblock content %}

@@ -16,10 +16,27 @@ urlpatterns = [
     # Django Admin, use {% url 'admin:index' %}
     path(settings.ADMIN_URL, admin.site.urls),
     # User management
-    path("users/", include("open_child_care_referral_platform.users.urls", namespace="users")),
+    path(
+        "users/",
+        include("open_child_care_referral_platform.users.urls", namespace="users"),
+    ),
     path("accounts/", include("allauth.urls")),
     # Provider directory
-    path("providers/", include("open_child_care_referral_platform.providers.urls", namespace="providers")),
+    path(
+        "providers/",
+        include(
+            "open_child_care_referral_platform.providers.urls",
+            namespace="providers",
+        ),
+    ),
+    # Referrals (coordinator back-office under staff/, family front-office at root)
+    path(
+        "referrals/",
+        include(
+            "open_child_care_referral_platform.referrals.urls",
+            namespace="referrals",
+        ),
+    ),
     # Your stuff: custom urls includes go here
     # ...
     # Media files

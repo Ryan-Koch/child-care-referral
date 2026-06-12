@@ -83,6 +83,7 @@ THIRD_PARTY_APPS = [
 LOCAL_APPS = [
     "open_child_care_referral_platform.users",
     "open_child_care_referral_platform.providers",
+    "open_child_care_referral_platform.referrals",
     # Your stuff: custom apps go here
 ]
 # https://docs.djangoproject.com/en/dev/ref/settings/#installed-apps
@@ -91,7 +92,9 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # MIGRATIONS
 # ------------------------------------------------------------------------------
 # https://docs.djangoproject.com/en/dev/ref/settings/#migration-modules
-MIGRATION_MODULES = {"sites": "open_child_care_referral_platform.contrib.sites.migrations"}
+MIGRATION_MODULES = {
+    "sites": "open_child_care_referral_platform.contrib.sites.migrations",
+}
 
 # AUTHENTICATION
 # ------------------------------------------------------------------------------
@@ -186,6 +189,7 @@ TEMPLATES = [
                 "django.template.context_processors.tz",
                 "django.contrib.messages.context_processors.messages",
                 "open_child_care_referral_platform.users.context_processors.allauth_settings",
+                "open_child_care_referral_platform.users.context_processors.user_roles",
             ],
         },
     },
@@ -275,12 +279,21 @@ ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 # https://docs.allauth.org/en/latest/account/configuration.html
 ACCOUNT_ADAPTER = "open_child_care_referral_platform.users.adapters.AccountAdapter"
 # https://docs.allauth.org/en/latest/account/forms.html
-ACCOUNT_FORMS = {"signup": "open_child_care_referral_platform.users.forms.UserSignupForm"}
+ACCOUNT_FORMS = {
+    "signup": "open_child_care_referral_platform.users.forms.UserSignupForm",
+}
 # https://docs.allauth.org/en/latest/socialaccount/configuration.html
-SOCIALACCOUNT_ADAPTER = "open_child_care_referral_platform.users.adapters.SocialAccountAdapter"
+SOCIALACCOUNT_ADAPTER = (
+    "open_child_care_referral_platform.users.adapters.SocialAccountAdapter"
+)
 # https://docs.allauth.org/en/latest/socialaccount/configuration.html
-SOCIALACCOUNT_FORMS = {"signup": "open_child_care_referral_platform.users.forms.UserSocialSignupForm"}
+SOCIALACCOUNT_FORMS = {
+    "signup": "open_child_care_referral_platform.users.forms.UserSocialSignupForm",
+}
 
 
 # Your stuff...
 # ------------------------------------------------------------------------------
+# Shared secret for the server-to-server referral ingestion endpoint
+# (referrals:ingest). Empty by default, which rejects all ingest requests.
+REFERRAL_INGEST_TOKEN = env("REFERRAL_INGEST_TOKEN", default="")

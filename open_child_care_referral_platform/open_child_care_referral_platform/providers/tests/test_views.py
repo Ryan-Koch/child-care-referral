@@ -51,6 +51,27 @@ def test_detail_renders_core_columns(client, provider):
 
 
 @pytest.mark.django_db
+def test_detail_shows_back_link_for_safe_next(client, provider):
+    search_url = "/referrals/my/child/1/search/?state=OH"
+    response = client.get(
+        reverse("providers:detail", kwargs={"pk": provider.pk}),
+        {"next": search_url},
+    )
+    assert response.context["back_url"] == search_url
+    assert search_url in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_detail_ignores_offsite_next(client, provider):
+    response = client.get(
+        reverse("providers:detail", kwargs={"pk": provider.pk}),
+        {"next": "https://evil.example.com/phish"},
+    )
+    assert response.context["back_url"] == ""
+    assert "evil.example.com" not in response.content.decode()
+
+
+@pytest.mark.django_db
 def test_detail_renders_nested_state_data_and_inspections(client, provider):
     response = client.get(reverse("providers:detail", kwargs={"pk": provider.pk}))
 

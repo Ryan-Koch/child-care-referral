@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Find providers · {{ child }}
+{% endblock title %}
+{% block content %}
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'referrals:my_referrals' %}">Your saved providers</a>
+      </li>
+      <li class="breadcrumb-item active" aria-current="page">Find providers</li>
+    </ol>
+  </nav>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h1 class="h3 mb-0">Find providers</h1>
+      <div class="text-muted">Saving for {{ child }}</div>
+    </div>
+    <a href="{% url 'referrals:my_referrals' %}"
+       class="btn btn-outline-secondary">Back to my providers</a>
+  </div>
+  {% include "providers/_filter_form.html" %}
+  <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
+    {% for provider in providers %}
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <h2 class="h5 card-title mb-0">
+                <a href="{% url 'providers:detail' provider.pk %}"
+                   class="text-decoration-none">{{ provider.provider_name|default:"Unnamed provider" }}</a>
+              </h2>
+              {% if provider.status %}
+                <span class="badge rounded-pill text-bg-secondary ms-2">{{ provider.status }}</span>
+              {% endif %}
+            </div>
+            <ul class="list-unstyled small mb-3">
+              {% if provider.provider_type %}
+                <li class="mb-1">
+                  <i class="bi bi-tag text-secondary me-2"></i>{{ provider.provider_type }}
+                </li>
+              {% endif %}
+              {% if provider.address %}
+                <li class="mb-1">
+                  <i class="bi bi-geo-alt text-secondary me-2"></i>{{ provider.address }}
+                </li>
+              {% endif %}
+              {% if provider.county %}
+                <li class="mb-1">
+                  <i class="bi bi-map text-secondary me-2"></i>{{ provider.county }} County
+                </li>
+              {% endif %}
+              {% if provider.phone %}
+                <li class="mb-1">
+                  <i class="bi bi-telephone text-secondary me-2"></i>{{ provider.phone }}
+                </li>
+              {% endif %}
+            </ul>
+            <div class="mt-auto d-flex gap-2">
+              <a href="{% url 'providers:detail' provider.pk %}?next={{ request.get_full_path|urlencode }}"
+                 class="btn btn-sm btn-outline-secondary">View details</a>
+              {% if provider.id in saved_provider_ids %}
+                <button type="button" class="btn btn-sm btn-success flex-grow-1" disabled>
+                  <i class="bi bi-check-lg me-1"></i>Saved
+                </button>
+              {% else %}
+                <form method="post"
+                      action="{% url 'referrals:family_add_provider' child.pk provider.pk %}"
+                      class="flex-grow-1">
+                  {% csrf_token %}
+                  <input type="hidden" name="next_qs" value="{{ search_qs }}" />
+                  <button type="submit" class="btn btn-sm btn-primary w-100">Save</button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="col-12">
+        {% if selected_state or selected_county %}
+          <p class="text-muted">No providers match your search.</p>
+        {% else %}
+          <p class="text-muted">Choose filters above to find providers to save.</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+  {% if is_paginated %}
+    <nav aria-label="Provider pages" class="mt-4">
+      <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+          <li class="page-item">
+            <a class="page-link"
+               href="{% querystring page=page_obj.previous_page_number %}">Previous</a>
+          </li>
+        {% else %}
+          <li class="page-item disabled">
+            <span class="page-link">Previous</span>
+          </li>
+        {% endif %}
+        <li class="page-item disabled">
+          <span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+        </li>
+        {% if page_obj.has_next %}
+          <li class="page-item">
+            <a class="page-link"
+               href="{% querystring page=page_obj.next_page_number %}">Next</a>
+          </li>
+        {% else %}
+          <li class="page-item disabled">
+            <span class="page-link">Next</span>
+          </li>
+        {% endif %}
+      </ul>
+    </nav>
+  {% endif %}
+{% endblock content %}

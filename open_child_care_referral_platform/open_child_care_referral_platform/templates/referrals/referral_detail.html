@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}
+  Referral · {{ referral.child }}
+{% endblock title %}
+{% block content %}
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item">
+        <a href="{% url 'referrals:queue' %}">Referral queue</a>
+      </li>
+      <li class="breadcrumb-item active" aria-current="page">{{ referral.child }}</li>
+    </ol>
+  </nav>
+  <div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
+    <div>
+      <h1 class="h3 mb-1">{{ referral.child }}</h1>
+      <span class="badge text-bg-secondary">{{ referral.get_status_display }}</span>
+      <span class="text-muted small ms-1">{{ referral.get_source_display }}</span>
+      {% if referral.help_requested %}
+        <span class="badge text-bg-warning ms-1">Needs help</span>
+      {% endif %}
+    </div>
+    <div class="text-end">
+      {% if referral.coordinator %}
+        <div class="text-muted small">Assigned to {{ referral.coordinator.name|default:referral.coordinator.email }}</div>
+      {% else %}
+        <form method="post" action="{% url 'referrals:claim' referral.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary">Claim this referral</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+  <div class="row g-3 mb-4">
+    <div class="col-lg-8">
+      <div class="card shadow-sm h-100">
+        <div class="card-header fw-semibold">Child</div>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-sm-3 text-muted fw-normal">Date of birth</dt>
+            <dd class="col-sm-9">
+              {{ referral.child.date_of_birth|date:"Y-m-d"|default:"—" }}
+            </dd>
+            <dt class="col-sm-3 text-muted fw-normal">Relationship</dt>
+            <dd class="col-sm-9">
+              {{ referral.child.get_relationship_display }}
+            </dd>
+            <dt class="col-sm-3 text-muted fw-normal">In school</dt>
+            <dd class="col-sm-9">
+              {{ referral.child.in_school|yesno:"Yes,No" }}
+            </dd>
+            <dt class="col-sm-3 text-muted fw-normal">Referral need</dt>
+            <dd class="col-sm-9">
+              {{ referral.child.get_referral_need_display }}
+            </dd>
+            <dt class="col-sm-3 text-muted fw-normal">Care schedule</dt>
+            <dd class="col-sm-9">
+              {% if care_schedule %}
+                <ul class="list-unstyled mb-0">
+                  {% for day, ranges in care_schedule %}
+                    <li>
+                      <span class="fw-semibold text-capitalize">{{ day }}:</span>
+                      {{ ranges|join:", " }}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <span class="text-muted">No schedule provided.</span>
+              {% endif %}
+            </dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header fw-semibold">Family contact</div>
+        <div class="card-body">
+          <div class="fw-semibold">{{ referral.child.family.name|default:"—" }}</div>
+          <div class="small">
+            <i class="bi bi-envelope text-secondary me-1"></i>{{ referral.child.family.email }}
+          </div>
+          {% if referral.child.family.phone %}
+            <div class="small">
+              <i class="bi bi-telephone text-secondary me-1"></i>{{ referral.child.family.phone }}
+            </div>
+          {% endif %}
+          <div class="mt-3">
+            {% if referral.child.family.has_usable_password %}
+              <span class="badge text-bg-success">Account active</span>
+            {% else %}
+              <form method="post"
+                    action="{% url 'referrals:invite_family' referral.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-primary">Send account-claim email</button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card shadow-sm mb-4">
+    <div class="card-header fw-semibold">Schools</div>
+    <div class="card-body">
+      {% for school in referral.child.schools.all %}
+        <div class="mb-2">
+          <div class="fw-semibold">{{ school.institution_name|default:"School" }}</div>
+          <div class="text-muted small">
+            {% if school.grade_level %}Grade {{ school.grade_level }} · {% endif %}
+            {{ school.city }}
+            {% if school.city and school.state %}, {% endif %}
+            {{ school.state }}
+          </div>
+        </div>
+      {% empty %}
+        <span class="text-muted">No schools on record.</span>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">Status & notes</span>
+      <form method="post"
+            action="{% url 'referrals:set_status' referral.pk %}"
+            class="d-flex gap-2 mb-0">
+        {% csrf_token %}
+        <select name="status" class="form-select form-select-sm">
+          {% for value, label in status_choices %}
+            <option value="{{ value }}"
+                    {% if value == referral.status %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Update</button>
+      </form>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{% url 'referrals:edit_notes' referral.pk %}">
+        {% csrf_token %}
+        <textarea name="notes" rows="3" class="form-control mb-2">{{ referral.notes }}</textarea>
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Save notes</button>
+      </form>
+    </div>
+  </div>
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">Saved providers</span>
+      <a href="{% url 'referrals:provider_search' referral.pk %}"
+         class="btn btn-sm btn-outline-primary">Add providers</a>
+    </div>
+    <div class="card-body">
+      {% for saved in referral.saved_providers.all %}
+        <div class="border rounded p-3 mb-3">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <h2 class="h6 mb-0">
+              <a href="{% url 'providers:detail' saved.provider.pk %}">{{ saved.provider }}</a>
+            </h2>
+            <form method="post" action="{% url 'referrals:provider_remove' saved.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+            </form>
+          </div>
+          <form method="post"
+                action="{% url 'referrals:provider_update' saved.pk %}"
+                class="row g-2 align-items-end">
+            {% csrf_token %}
+            <div class="col-sm-4">
+              <label for="status-{{ saved.pk }}" class="form-label mb-1 small">Status</label>
+              <select id="status-{{ saved.pk }}"
+                      name="status"
+                      class="form-select form-select-sm">
+                {% for value, label in provider_status_choices %}
+                  <option value="{{ value }}" {% if value == saved.status %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-sm-6">
+              <label for="notes-{{ saved.pk }}" class="form-label mb-1 small">Notes</label>
+              <input id="notes-{{ saved.pk }}"
+                     type="text"
+                     name="notes"
+                     value="{{ saved.notes }}"
+                     class="form-control form-control-sm" />
+            </div>
+            <div class="col-sm-2">
+              <button type="submit" class="btn btn-sm btn-outline-secondary w-100">Save</button>
+            </div>
+          </form>
+        </div>
+      {% empty %}
+        <span class="text-muted">No providers saved yet.</span>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="text-muted small">
+    Referral #{{ referral.pk }} · created {{ referral.created|date:"Y-m-d" }} · updated
+    {{ referral.modified|date:"Y-m-d" }}
+  </div>
+{% endblock content %}

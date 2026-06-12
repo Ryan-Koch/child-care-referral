@@ -7,6 +7,5 @@ class UsersConfig(AppConfig):
     verbose_name = _("Users")
 
     def ready(self):
-        """
-        Override this method in subclasses to run code when Django starts.
-        """
+        """Wire up signal receivers (email verification on password reset)."""
+        from open_child_care_referral_platform.users import signals  # noqa: F401

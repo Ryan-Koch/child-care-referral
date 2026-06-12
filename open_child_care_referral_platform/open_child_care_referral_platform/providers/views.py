@@ -15,6 +15,7 @@ from django.db.models import Value
 from django.db.models.functions import Cast
 from django.db.models.functions import Replace
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import DetailView
 from django.views.generic import ListView
 
@@ -404,7 +405,24 @@ class ProviderDetailView(DetailView):
             if field.name not in _NON_TABLE_FIELDS
         ]
         context["inspections"] = provider.inspections.all()
+        context["back_url"] = self._safe_back_url()
         return context
+
+    def _safe_back_url(self) -> str:
+        """A ``?next=`` URL to offer as a "back" link, only if same-site safe.
+
+        Lets callers (e.g. the family/coordinator provider search) send a user
+        into this shared detail page and back to where they came from, without
+        coupling this app to theirs.
+        """
+        next_url = self.request.GET.get("next", "")
+        if next_url and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={self.request.get_host()},
+            require_https=self.request.is_secure(),
+        ):
+            return next_url
+        return ""
 
 
 provider_detail_view = ProviderDetailView.as_view()

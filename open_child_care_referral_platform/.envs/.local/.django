@@ -2,3 +2,9 @@
 # ------------------------------------------------------------------------------
 USE_DOCKER=yes
 IPYTHONDIR=/app/.ipython
+
+# Referrals
+# ------------------------------------------------------------------------------
+# Shared secret for the referral ingestion endpoint (referrals:ingest).
+# Local-only dev value; set a real secret in production.
+REFERRAL_INGEST_TOKEN=local-dev-ingest-token
