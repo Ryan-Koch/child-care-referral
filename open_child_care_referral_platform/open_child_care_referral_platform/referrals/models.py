@@ -214,3 +214,41 @@ class ReferralProvider(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.provider} on referral #{self.referral_id}"
+
+
+class Message(TimeStampedModel):
+    """A single in-app message on a :class:`Referral` (Task 10).
+
+    The conversation is two-sided: the child's family and the coordinator
+    side (back-office staff). "Which side sent this" is derived, not stored —
+    a message is family-sent when ``sender == referral.child.family``; anyone
+    else posting is the coordinator side (only those two parties can post, and
+    that is enforced in the views).
+
+    ``read_at`` is a single-reader marker: it records when the *other* side
+    first read the message, which is enough for basic unread indication in a
+    two-party thread (see Task 10 notes). ``sender`` is nullable so deleting a
+    user keeps the history (``SET_NULL``).
+    """
+
+    referral = models.ForeignKey(
+        Referral,
+        on_delete=models.CASCADE,
+        related_name="messages",
+    )
+    sender = models.ForeignKey(
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sent_messages",
+    )
+    body = models.TextField()
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        # Oldest first: threads read top-to-bottom like a conversation.
+        ordering = ["created"]
+
+    def __str__(self) -> str:
+        return f"Message #{self.pk} on referral #{self.referral_id}"

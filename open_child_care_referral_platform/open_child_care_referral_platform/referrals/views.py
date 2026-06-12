@@ -15,10 +15,16 @@ from typing import Any
 
 from django.conf import settings
 from django.contrib import messages
+from django.db.models import Count
+from django.db.models import F
+from django.db.models import Prefetch
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.shortcuts import redirect
+from django.shortcuts import render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView
@@ -27,9 +33,11 @@ from django.views.generic import TemplateView
 
 from open_child_care_referral_platform.providers.models import Provider
 from open_child_care_referral_platform.providers.views import ProviderListView
+from open_child_care_referral_platform.referrals.forms import MessageForm
 from open_child_care_referral_platform.referrals.forms import ReferralNotesForm
 from open_child_care_referral_platform.referrals.forms import ReferralProviderForm
 from open_child_care_referral_platform.referrals.models import Child
+from open_child_care_referral_platform.referrals.models import Message
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
 from open_child_care_referral_platform.referrals.services import ingest_referral_request
@@ -86,6 +94,41 @@ def family_referrals(user) -> QuerySet[Referral]:
     return Referral.objects.filter(child__family=user)
 
 
+# --- messaging (Task 10) --------------------------------------------------
+#
+# A message is "family-sent" when its sender is the referral's child's family;
+# anything else on the thread is the coordinator side. The two unread counts are
+# mirror images of that rule: the coordinator side cares about unread family
+# messages; the family cares about unread coordinator messages.
+_FAMILY_SENT = Q(messages__sender=F("child__family"))
+_UNREAD = Q(messages__read_at__isnull=True)
+
+
+def _unread_family_messages() -> Count:
+    """Per-referral count of unread messages from the family (coordinator view)."""
+    return Count("messages", filter=_UNREAD & _FAMILY_SENT)
+
+
+def _unread_coordinator_messages() -> Count:
+    """Per-referral count of unread messages from the coordinator side (family view)."""
+    return Count("messages", filter=_UNREAD & ~_FAMILY_SENT)
+
+
+def _mark_thread_read(referral: Referral, *, reader_is_family: bool) -> None:
+    """Mark the messages the reader is receiving as read.
+
+    The family reads coordinator-sent messages; the coordinator side reads
+    family-sent ones. ``referral.child`` must be loaded by the caller.
+    """
+    unread = referral.messages.filter(read_at__isnull=True)
+    family_id = referral.child.family_id
+    if reader_is_family:
+        unread = unread.exclude(sender_id=family_id)
+    else:
+        unread = unread.filter(sender_id=family_id)
+    unread.update(read_at=timezone.now())
+
+
 class ReferralQueueView(CoordinatorRequiredMixin, ListView):
     model = Referral
     context_object_name = "referrals"
@@ -109,7 +152,7 @@ class ReferralQueueView(CoordinatorRequiredMixin, ListView):
             "child",
             "child__family",
             "coordinator",
-        )
+        ).annotate(unread_family_messages=_unread_family_messages())
         if self.selected_status in Referral.Status.values:
             queryset = queryset.filter(status=self.selected_status)
         else:
@@ -149,8 +192,11 @@ class MyReferralsView(FamilyRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
+        referrals = Referral.objects.annotate(
+            unread_coordinator_messages=_unread_coordinator_messages(),
+        ).prefetch_related("saved_providers__provider")
         context["children"] = family_children(self.request.user).prefetch_related(
-            "referrals__saved_providers__provider",
+            Prefetch("referrals", queryset=referrals),
         )
         return context
 
@@ -195,7 +241,18 @@ class ReferralDetailView(CoordinatorRequiredMixin, DetailView):
             "child",
             "child__family",
             "coordinator",
-        ).prefetch_related("saved_providers__provider", "child__schools")
+        ).prefetch_related(
+            "saved_providers__provider",
+            "child__schools",
+            Prefetch("messages", queryset=Message.objects.select_related("sender")),
+        )
+
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        # Render first (so the thread can highlight what's new on this load),
+        # then mark the family's messages read for the next visit.
+        response = super().get(request, *args, **kwargs)
+        _mark_thread_read(self.object, reader_is_family=False)
+        return response
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -203,6 +260,8 @@ class ReferralDetailView(CoordinatorRequiredMixin, DetailView):
         context["care_schedule"] = _format_care_schedule(referral.child.care_schedule)
         context["status_choices"] = Referral.Status.choices
         context["provider_status_choices"] = ReferralProvider.Status.choices
+        context["thread"] = referral.messages.all()
+        context["message_form"] = MessageForm()
         return context
 
 
@@ -338,6 +397,28 @@ def referral_add_provider_view(
     return redirect(f"{base}?{next_qs}" if next_qs else base)
 
 
+@require_POST
+@coordinator_required
+def referral_message_post_view(request: HttpRequest, pk: int) -> HttpResponse:
+    """Coordinator posts a message to a referral thread (Task 10, View #5).
+
+    Gated like every other coordinator action on the detail page: any
+    coordinator can post (the back office is not scoped per-assignee), which
+    also lets staff reply before the referral is claimed.
+    """
+    referral = get_object_or_404(Referral, pk=pk)
+    form = MessageForm(request.POST)
+    if form.is_valid():
+        message = form.save(commit=False)
+        message.referral = referral
+        message.sender_id = request.user.pk
+        message.save()
+        messages.success(request, "Message sent.")
+    else:
+        messages.error(request, "Your message can't be empty.")
+    return redirect(reverse("referrals:detail", kwargs={"pk": pk}) + "#messages")
+
+
 @csrf_exempt
 @require_POST
 def referral_ingest_view(request: HttpRequest) -> HttpResponse:
@@ -397,3 +478,41 @@ def family_request_help_view(request: HttpRequest, referral_pk: int) -> HttpResp
         "We've let a coordinator know you'd like help with this referral.",
     )
     return redirect("referrals:my_referrals")
+
+
+@family_required
+def family_messages_view(request: HttpRequest, referral_pk: int) -> HttpResponse:
+    """Family's message thread for one of their referrals (Task 10, View #6).
+
+    Scoped to the family's own referrals — another family's thread is a 404,
+    same ownership discipline as the rest of the portal.
+    """
+    referral = get_object_or_404(
+        family_referrals(request.user).select_related("child__family", "coordinator"),
+        pk=referral_pk,
+    )
+    # Read the thread before marking it, so the page can highlight what's new.
+    thread = list(referral.messages.select_related("sender"))
+    _mark_thread_read(referral, reader_is_family=True)
+    context = {
+        "referral": referral,
+        "thread": thread,
+        "message_form": MessageForm(),
+    }
+    return render(request, "referrals/family_messages.html", context)
+
+
+@require_POST
+@family_required
+def family_message_post_view(request: HttpRequest, referral_pk: int) -> HttpResponse:
+    referral = get_object_or_404(family_referrals(request.user), pk=referral_pk)
+    form = MessageForm(request.POST)
+    if form.is_valid():
+        message = form.save(commit=False)
+        message.referral = referral
+        message.sender_id = request.user.pk
+        message.save()
+        messages.success(request, "Message sent.")
+    else:
+        messages.error(request, "Your message can't be empty.")
+    return redirect("referrals:family_messages", referral_pk=referral_pk)

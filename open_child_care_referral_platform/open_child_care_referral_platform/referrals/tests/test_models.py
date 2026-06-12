@@ -7,9 +7,11 @@ from django.db import transaction
 from open_child_care_referral_platform.providers.models import Provider
 from open_child_care_referral_platform.providers.tests.factories import ProviderFactory
 from open_child_care_referral_platform.referrals.models import Child
+from open_child_care_referral_platform.referrals.models import Message
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
 from open_child_care_referral_platform.referrals.tests.factories import ChildFactory
+from open_child_care_referral_platform.referrals.tests.factories import MessageFactory
 from open_child_care_referral_platform.referrals.tests.factories import ReferralFactory
 from open_child_care_referral_platform.referrals.tests.factories import SchoolFactory
 
@@ -98,6 +100,30 @@ def test_provider_unique_per_referral() -> None:
     ReferralProvider.objects.create(referral=referral, provider=provider)
     with pytest.raises(IntegrityError), transaction.atomic():
         ReferralProvider.objects.create(referral=referral, provider=provider)
+
+
+@pytest.mark.django_db
+def test_message_defaults_and_ordering() -> None:
+    referral = ReferralFactory.create()
+    second = MessageFactory.create(referral=referral, body="second")
+    first = MessageFactory.create(referral=referral, body="first")
+    # Backfill `created` so order is deterministic regardless of insert order.
+    Message.objects.filter(pk=first.pk).update(created="2020-01-01T00:00:00Z")
+    Message.objects.filter(pk=second.pk).update(created="2020-01-02T00:00:00Z")
+
+    bodies = list(referral.messages.values_list("body", flat=True))
+    assert bodies == ["first", "second"]
+    assert first.read_at is None
+
+
+@pytest.mark.django_db
+def test_message_sender_set_null_on_user_delete() -> None:
+    message = MessageFactory.create()
+    sender = message.sender
+    assert sender is not None
+    sender.delete()
+    message.refresh_from_db()
+    assert message.sender is None
 
 
 @pytest.mark.django_db

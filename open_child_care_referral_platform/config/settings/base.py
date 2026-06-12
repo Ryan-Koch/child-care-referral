@@ -190,6 +190,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "open_child_care_referral_platform.users.context_processors.allauth_settings",
                 "open_child_care_referral_platform.users.context_processors.user_roles",
+                "open_child_care_referral_platform.users.context_processors.unread_messages",
             ],
         },
     },

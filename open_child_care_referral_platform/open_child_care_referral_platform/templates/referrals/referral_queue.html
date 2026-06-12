@@ -73,6 +73,10 @@
               {% if referral.help_requested %}
                 <span class="badge text-bg-warning ms-1">Needs help</span>
               {% endif %}
+              {% if referral.unread_family_messages %}
+                <span class="badge text-bg-danger ms-1"
+                      title="Unread messages from the family">{{ referral.unread_family_messages }} new</span>
+              {% endif %}
             </td>
             <td>
               <div>{{ referral.child.family.name|default:"—" }}</div>

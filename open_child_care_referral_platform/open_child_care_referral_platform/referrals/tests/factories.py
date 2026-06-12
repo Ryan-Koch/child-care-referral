@@ -6,6 +6,7 @@ from factory.django import DjangoModelFactory
 
 from open_child_care_referral_platform.providers.tests.factories import ProviderFactory
 from open_child_care_referral_platform.referrals.models import Child
+from open_child_care_referral_platform.referrals.models import Message
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
 from open_child_care_referral_platform.referrals.models import School
@@ -45,3 +46,12 @@ class ReferralProviderFactory(DjangoModelFactory[ReferralProvider]):
 
     class Meta:
         model = ReferralProvider
+
+
+class MessageFactory(DjangoModelFactory[Message]):
+    referral = SubFactory(ReferralFactory)
+    sender = SubFactory(UserFactory)
+    body = Faker("sentence")
+
+    class Meta:
+        model = Message

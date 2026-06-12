@@ -9,9 +9,11 @@ from django.core import mail
 from django.urls import reverse
 
 from open_child_care_referral_platform.providers.tests.factories import ProviderFactory
+from open_child_care_referral_platform.referrals.models import Message
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
 from open_child_care_referral_platform.referrals.tests.factories import ChildFactory
+from open_child_care_referral_platform.referrals.tests.factories import MessageFactory
 from open_child_care_referral_platform.referrals.tests.factories import ReferralFactory
 from open_child_care_referral_platform.referrals.tests.factories import (
     ReferralProviderFactory,
@@ -590,3 +592,239 @@ def test_request_help_404_for_other_familys_referral(client) -> None:
     assert response.status_code == HTTPStatus.NOT_FOUND
     referral.refresh_from_db()
     assert referral.help_requested is False
+
+
+# --- messaging (Task 10, Views #5/#6) -------------------------------------
+
+
+def _family_referral():
+    """A referral whose child's family is a Family-group user, plus that user."""
+    fam = make_family()
+    child = ChildFactory.create(family=fam)
+    return ReferralFactory.create(child=child), fam
+
+
+def _family_message(referral) -> Message:
+    return MessageFactory.create(referral=referral, sender=referral.child.family)
+
+
+def _coordinator_message(referral, coordinator=None) -> Message:
+    return MessageFactory.create(
+        referral=referral,
+        sender=coordinator or make_coordinator(),
+    )
+
+
+@pytest.mark.django_db
+def test_detail_renders_message_thread(client) -> None:
+    client.force_login(make_coordinator())
+    referral, _ = _family_referral()
+    _family_message(referral)  # body via factory
+    message = referral.messages.get()
+
+    content = client.get(_detail_url(referral)).content.decode()
+
+    assert message.body in content
+
+
+@pytest.mark.django_db
+def test_coordinator_message_post_creates_message(client) -> None:
+    coordinator = make_coordinator()
+    client.force_login(coordinator)
+    referral, _ = _family_referral()
+
+    response = client.post(
+        reverse("referrals:message_post", kwargs={"pk": referral.pk}),
+        {"body": "Following up on your request."},
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url.endswith("#messages")
+    message = referral.messages.get()
+    assert message.sender == coordinator
+    assert message.body == "Following up on your request."
+
+
+@pytest.mark.django_db
+def test_coordinator_message_post_rejects_empty_body(client) -> None:
+    client.force_login(make_coordinator())
+    referral, _ = _family_referral()
+
+    client.post(
+        reverse("referrals:message_post", kwargs={"pk": referral.pk}),
+        {"body": "   "},
+    )
+
+    assert not referral.messages.exists()
+
+
+@pytest.mark.django_db
+def test_coordinator_message_post_rejects_non_coordinator(client) -> None:
+    referral, fam = _family_referral()
+    client.force_login(fam)
+
+    response = client.post(
+        reverse("referrals:message_post", kwargs={"pk": referral.pk}),
+        {"body": "hi"},
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert not referral.messages.exists()
+
+
+@pytest.mark.django_db
+def test_detail_view_marks_family_messages_read(client) -> None:
+    referral, _ = _family_referral()
+    family_msg = _family_message(referral)
+    # A coordinator's own message stays untouched (only the *other* side's read).
+    coord_msg = _coordinator_message(referral)
+
+    client.force_login(make_coordinator())
+    client.get(_detail_url(referral))
+
+    family_msg.refresh_from_db()
+    coord_msg.refresh_from_db()
+    assert family_msg.read_at is not None
+    assert coord_msg.read_at is None
+
+
+@pytest.mark.django_db
+def test_queue_shows_unread_family_message_count(client) -> None:
+    referral, _ = _family_referral()
+    _family_message(referral)
+    referral.status = Referral.Status.NEW
+    referral.save(update_fields=["status"])
+
+    client.force_login(make_coordinator())
+    response = client.get(reverse("referrals:queue"))
+
+    queued = next(r for r in response.context["referrals"] if r.pk == referral.pk)
+    assert queued.unread_family_messages == 1
+    assert "1 new" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_family_messages_page_shows_own_thread(client) -> None:
+    referral, fam = _family_referral()
+    _coordinator_message(referral)
+    message = referral.messages.get()
+    client.force_login(fam)
+
+    response = client.get(
+        reverse("referrals:family_messages", kwargs={"referral_pk": referral.pk}),
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert message.body in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_family_messages_page_404_for_other_familys_referral(client) -> None:
+    referral, _ = _family_referral()
+    other = make_family()
+    client.force_login(other)
+
+    response = client.get(
+        reverse("referrals:family_messages", kwargs={"referral_pk": referral.pk}),
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.django_db
+def test_family_messages_page_forbids_coordinator(client) -> None:
+    referral, _ = _family_referral()
+    client.force_login(make_coordinator())
+
+    response = client.get(
+        reverse("referrals:family_messages", kwargs={"referral_pk": referral.pk}),
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_family_messages_page_marks_coordinator_messages_read(client) -> None:
+    referral, fam = _family_referral()
+    coord_msg = _coordinator_message(referral)
+    own_msg = _family_message(referral)
+    client.force_login(fam)
+
+    client.get(
+        reverse("referrals:family_messages", kwargs={"referral_pk": referral.pk}),
+    )
+
+    coord_msg.refresh_from_db()
+    own_msg.refresh_from_db()
+    assert coord_msg.read_at is not None
+    assert own_msg.read_at is None
+
+
+@pytest.mark.django_db
+def test_family_message_post_creates_message(client) -> None:
+    referral, fam = _family_referral()
+    client.force_login(fam)
+
+    response = client.post(
+        reverse("referrals:family_message_post", kwargs={"referral_pk": referral.pk}),
+        {"body": "Thanks for the help!"},
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    message = referral.messages.get()
+    assert message.sender == fam
+    assert message.body == "Thanks for the help!"
+
+
+@pytest.mark.django_db
+def test_family_message_post_404_for_other_familys_referral(client) -> None:
+    referral, _ = _family_referral()
+    other = make_family()
+    client.force_login(other)
+
+    response = client.post(
+        reverse("referrals:family_message_post", kwargs={"referral_pk": referral.pk}),
+        {"body": "sneaky"},
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert not referral.messages.exists()
+
+
+@pytest.mark.django_db
+def test_family_message_post_rejects_coordinator(client) -> None:
+    referral, _ = _family_referral()
+    client.force_login(make_coordinator())
+
+    response = client.post(
+        reverse("referrals:family_message_post", kwargs={"referral_pk": referral.pk}),
+        {"body": "hi"},
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert not referral.messages.exists()
+
+
+@pytest.mark.django_db
+def test_my_referrals_shows_unread_coordinator_badge(client) -> None:
+    referral, fam = _family_referral()
+    _coordinator_message(referral)
+    client.force_login(fam)
+
+    response = client.get(reverse("referrals:my_referrals"))
+
+    child = next(c for c in response.context["children"] if c.pk == referral.child.pk)
+    annotated = child.referrals.all()[0]
+    assert annotated.unread_coordinator_messages == 1
+
+
+@pytest.mark.django_db
+def test_nav_unread_badge_counts_only_coordinator_messages(client) -> None:
+    referral, fam = _family_referral()
+    _coordinator_message(referral)
+    _family_message(referral)  # the family's own message must not count
+    client.force_login(fam)
+
+    response = client.get(reverse("referrals:my_referrals"))
+
+    assert response.context["unread_message_count"] == 1
