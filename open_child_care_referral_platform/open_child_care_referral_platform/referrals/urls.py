@@ -8,13 +8,13 @@ views live at the app root (Tasks 08-09).
 from django.urls import path
 
 from open_child_care_referral_platform.referrals.views import family_add_child_view
-from open_child_care_referral_platform.referrals.views import family_add_provider_view
 from open_child_care_referral_platform.referrals.views import family_message_post_view
 from open_child_care_referral_platform.referrals.views import family_messages_view
 from open_child_care_referral_platform.referrals.views import (
     family_provider_search_view,
 )
 from open_child_care_referral_platform.referrals.views import family_request_help_view
+from open_child_care_referral_platform.referrals.views import family_save_provider_view
 from open_child_care_referral_platform.referrals.views import my_referrals_view
 from open_child_care_referral_platform.referrals.views import portal_view
 from open_child_care_referral_platform.referrals.views import referral_add_provider_view
@@ -43,17 +43,12 @@ urlpatterns = [
     # Family front office (portal + saved providers) at the app root.
     path("", portal_view, name="portal"),
     path("my/", my_referrals_view, name="my_referrals"),
-    # Literal "add" can't match the <int:child_pk> routes below, so order is safe.
     path("my/child/add/", family_add_child_view, name="family_add_child"),
+    path("my/search/", family_provider_search_view, name="family_search"),
     path(
-        "my/child/<int:child_pk>/search/",
-        family_provider_search_view,
-        name="family_search",
-    ),
-    path(
-        "my/child/<int:child_pk>/add/<int:provider_pk>/",
-        family_add_provider_view,
-        name="family_add_provider",
+        "my/save-provider/",
+        family_save_provider_view,
+        name="family_save_provider",
     ),
     path(
         "my/referral/<int:referral_pk>/request-help/",

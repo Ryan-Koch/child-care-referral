@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 
+{% load referral_extras %}
+
 {% block title %}
-  Find providers · {{ child }}
+  Find providers
 {% endblock title %}
 {% block content %}
   <nav aria-label="breadcrumb">
@@ -13,13 +15,17 @@
     </ol>
   </nav>
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-      <h1 class="h3 mb-0">Find providers</h1>
-      <div class="text-muted">Saving for {{ child }}</div>
-    </div>
+    <h1 class="h3 mb-0">Find providers</h1>
     <a href="{% url 'referrals:my_referrals' %}"
        class="btn btn-outline-secondary">Back to my providers</a>
   </div>
+  {% if not family_children %}
+    <div class="alert alert-info" role="alert">
+      Add a child before you can save providers.
+      <a href="{% url 'referrals:family_add_child' %}" class="alert-link">Add a child</a>
+      to get started.
+    </div>
+  {% endif %}
   {% include "providers/_filter_form.html" %}
   <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 g-3">
     {% for provider in providers %}
@@ -57,21 +63,11 @@
                 </li>
               {% endif %}
             </ul>
-            <div class="mt-auto d-flex gap-2">
+            <div class="mt-auto">
               <a href="{% url 'providers:detail' provider.pk %}?next={{ request.get_full_path|urlencode }}"
-                 class="btn btn-sm btn-outline-secondary">View details</a>
-              {% if provider.id in saved_provider_ids %}
-                <button type="button" class="btn btn-sm btn-success flex-grow-1" disabled>
-                  <i class="bi bi-check-lg me-1"></i>Saved
-                </button>
-              {% else %}
-                <form method="post"
-                      action="{% url 'referrals:family_add_provider' child.pk provider.pk %}"
-                      class="flex-grow-1">
-                  {% csrf_token %}
-                  <input type="hidden" name="next_qs" value="{{ search_qs }}" />
-                  <button type="submit" class="btn btn-sm btn-primary w-100">Save</button>
-                </form>
+                 class="btn btn-sm btn-outline-secondary mb-2">View details</a>
+              {% if family_children %}
+                {% family_save_control provider %}
               {% endif %}
             </div>
           </div>

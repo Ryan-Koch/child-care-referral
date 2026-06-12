@@ -17,7 +17,7 @@
     <div class="card shadow-sm mb-4">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span class="fw-semibold">{{ child }}</span>
-        <a href="{% url 'referrals:family_search' child.pk %}"
+        <a href="{% url 'referrals:family_search' %}?child={{ child.pk }}"
            class="btn btn-sm btn-primary">Find providers</a>
       </div>
       <div class="card-body">

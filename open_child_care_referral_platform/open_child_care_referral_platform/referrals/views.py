@@ -12,6 +12,8 @@ from functools import cached_property
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 from typing import Any
+from urllib.parse import urlsplit
+from urllib.parse import urlunsplit
 
 from django.conf import settings
 from django.contrib import messages
@@ -19,12 +21,15 @@ from django.db.models import Count
 from django.db.models import F
 from django.db.models import Prefetch
 from django.db.models import Q
+from django.http import Http404
 from django.http import JsonResponse
+from django.http import QueryDict
 from django.shortcuts import get_object_or_404
 from django.shortcuts import redirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView
@@ -206,26 +211,27 @@ my_referrals_view = MyReferralsView.as_view()
 
 
 class FamilyProviderSearchView(FamilyRequiredMixin, ProviderListView):
-    """Provider search scoped to one of the family's own children."""
+    """One provider search where the family picks which child to save each result
+    for. Reuses all of ``ProviderListView``'s filtering; the per-result "save for
+    a child" control is the ``family_save_control`` template tag."""
 
     template_name = "referrals/family_provider_search.html"
 
-    @cached_property
-    def child(self) -> Child:
-        return get_object_or_404(
-            family_children(self.request.user),
-            pk=self.kwargs["child_pk"],
-        )
-
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        context["child"] = self.child
-        context["saved_provider_ids"] = set(
-            ReferralProvider.objects.filter(
-                referral__child=self.child,
-            ).values_list("provider_id", flat=True),
-        )
-        context["search_qs"] = self.request.GET.urlencode()
+        user = self.request.user
+        context["family_children"] = list(family_children(user))
+        # One query for the page: which of the family's children already saved
+        # each provider shown, so cards can say "Saved for …" without N queries.
+        page_provider_ids = [provider.pk for provider in context["providers"]]
+        saved_map: dict[int, set[int]] = {}
+        rows = ReferralProvider.objects.filter(
+            referral__in=family_referrals(user),
+            provider_id__in=page_provider_ids,
+        ).values_list("provider_id", "referral__child_id")
+        for provider_id, child_id in rows:
+            saved_map.setdefault(provider_id, set()).add(child_id)
+        context["family_saved_map"] = saved_map
         return context
 
 
@@ -458,24 +464,58 @@ def family_add_child_view(request: HttpRequest) -> HttpResponse:
                 status=Referral.Status.NEW,
             )
             messages.success(request, f"Added {child}.")
-            # Land on the new child's provider search. Once Task 12 makes the
-            # search a single view, change this to
-            # reverse("referrals:family_search") + f"?child={child.pk}".
-            return redirect("referrals:family_search", child_pk=child.pk)
+            # Land on the provider search with the picker defaulting to the new
+            # child (the search is one shared view; child rides in the query).
+            return redirect(reverse("referrals:family_search") + f"?child={child.pk}")
     else:
         form = ChildForm()
     return render(request, "referrals/family_add_child.html", {"form": form})
 
 
+def _posted_id(request: HttpRequest, key: str) -> int:
+    """A positive-int POST value, or a 404 — POST ids are untrusted (no URL
+    converter validates them), so malformed input is a clean 404 not a 500."""
+    raw = request.POST.get(key, "")
+    if not raw.isdigit():
+        raise Http404
+    return int(raw)
+
+
+def _family_save_redirect(request: HttpRequest, child: Child) -> str:
+    """Where to send the family after a save: back to the page they came from
+    (``next``, filters preserved) with the just-saved child kept selected.
+    Falls back to the search; an off-site ``next`` is rejected."""
+    next_url = request.POST.get("next", "")
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse("referrals:family_search")
+    # Keep the saved child selected without collapsing multi-value filters
+    # (e.g. ?sc_program=a&sc_program=b), so QueryDict rather than a plain dict.
+    parts = urlsplit(next_url)
+    query = QueryDict(parts.query, mutable=True)
+    query["child"] = str(child.pk)
+    return urlunsplit(
+        (parts.scheme, parts.netloc, parts.path, query.urlencode(), parts.fragment),
+    )
+
+
 @require_POST
 @family_required
-def family_add_provider_view(
-    request: HttpRequest,
-    child_pk: int,
-    provider_pk: int,
-) -> HttpResponse:
-    child = get_object_or_404(family_children(request.user), pk=child_pk)
-    provider = get_object_or_404(Provider, pk=provider_pk)
+def family_save_provider_view(request: HttpRequest) -> HttpResponse:
+    """Save a provider to one of the family's own children (Task 12).
+
+    Child and provider come from the POST body so a single search (and the
+    provider detail page, Task 13) can target any child. Scoping the child lookup
+    to the family makes a cross-family save a clean 404.
+    """
+    child = get_object_or_404(
+        family_children(request.user),
+        pk=_posted_id(request, "child"),
+    )
+    provider = get_object_or_404(Provider, pk=_posted_id(request, "provider"))
     # Add to the child's existing referral, or start a family-created one.
     referral = family_referrals(request.user).filter(child=child).first()
     if referral is None:
@@ -489,10 +529,8 @@ def family_add_provider_view(
         provider=provider,
         defaults={"added_by_id": request.user.pk},
     )
-    messages.success(request, f"Saved {provider}.")
-    base = reverse("referrals:family_search", kwargs={"child_pk": child_pk})
-    next_qs = request.POST.get("next_qs", "")
-    return redirect(f"{base}?{next_qs}" if next_qs else base)
+    messages.success(request, f"Saved {provider} for {child}.")
+    return redirect(_family_save_redirect(request, child))
 
 
 @require_POST
