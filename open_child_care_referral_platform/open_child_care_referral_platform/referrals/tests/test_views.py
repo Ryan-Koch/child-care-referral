@@ -9,6 +9,7 @@ from django.core import mail
 from django.urls import reverse
 
 from open_child_care_referral_platform.providers.tests.factories import ProviderFactory
+from open_child_care_referral_platform.referrals.models import Child
 from open_child_care_referral_platform.referrals.models import Message
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
@@ -429,6 +430,92 @@ def test_invite_family_rejects_non_coordinator(client) -> None:
     )
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert not mail.outbox
+
+
+# --- family: add a child (Task 11) ----------------------------------------
+
+
+@pytest.mark.django_db
+def test_add_child_renders_form_for_family(client) -> None:
+    client.force_login(make_family())
+    response = client.get(reverse("referrals:family_add_child"))
+    assert response.status_code == HTTPStatus.OK
+    assert "form" in response.context
+
+
+@pytest.mark.django_db
+def test_add_child_creates_child_referral_and_redirects_to_search(client) -> None:
+    fam = make_family()
+    client.force_login(fam)
+
+    response = client.post(
+        reverse("referrals:family_add_child"),
+        {
+            "first_name": "Ada",
+            "last_name": "Lovelace",
+            "date_of_birth": "2018-12-10",
+            "relationship": Child.Relationship.CHILD,
+        },
+    )
+
+    child = Child.objects.get(family=fam, first_name="Ada")
+    assert child.last_name == "Lovelace"
+    referral = Referral.objects.get(child=child)
+    assert referral.source == Referral.Source.FAMILY
+    assert referral.status == Referral.Status.NEW
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url == reverse(
+        "referrals:family_search",
+        kwargs={"child_pk": child.pk},
+    )
+
+
+@pytest.mark.django_db
+def test_add_child_ignores_posted_family(client) -> None:
+    fam = make_family()
+    other = make_family()
+    client.force_login(fam)
+
+    client.post(
+        reverse("referrals:family_add_child"),
+        {
+            "first_name": "Grace",
+            "relationship": Child.Relationship.CHILD,
+            "family": other.pk,  # must be ignored — child belongs to the poster
+        },
+    )
+
+    child = Child.objects.get(first_name="Grace")
+    assert child.family == fam
+
+
+@pytest.mark.django_db
+def test_add_child_invalid_creates_nothing(client) -> None:
+    fam = make_family()
+    client.force_login(fam)
+
+    response = client.post(
+        reverse("referrals:family_add_child"),
+        {"relationship": Child.Relationship.CHILD},  # missing required first_name
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.context["form"].errors
+    assert not Child.objects.filter(family=fam).exists()
+    assert not Referral.objects.filter(child__family=fam).exists()
+
+
+@pytest.mark.django_db
+def test_add_child_redirects_anonymous_to_login(client) -> None:
+    response = client.get(reverse("referrals:family_add_child"))
+    assert response.status_code == HTTPStatus.FOUND
+
+
+@pytest.mark.django_db
+def test_add_child_forbids_coordinator(client) -> None:
+    client.force_login(make_coordinator())
+    response = client.get(reverse("referrals:family_add_child"))
+    assert response.status_code == HTTPStatus.FORBIDDEN
 
 
 # --- family saved providers (View #2) -------------------------------------

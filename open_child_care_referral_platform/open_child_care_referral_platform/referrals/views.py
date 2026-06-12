@@ -33,6 +33,7 @@ from django.views.generic import TemplateView
 
 from open_child_care_referral_platform.providers.models import Provider
 from open_child_care_referral_platform.providers.views import ProviderListView
+from open_child_care_referral_platform.referrals.forms import ChildForm
 from open_child_care_referral_platform.referrals.forms import MessageForm
 from open_child_care_referral_platform.referrals.forms import ReferralNotesForm
 from open_child_care_referral_platform.referrals.forms import ReferralProviderForm
@@ -437,6 +438,33 @@ def referral_ingest_view(request: HttpRequest) -> HttpResponse:
         {"referral_ids": [referral.id for referral in referrals]},
         status=HTTPStatus.CREATED,
     )
+
+
+@family_required
+def family_add_child_view(request: HttpRequest) -> HttpResponse:
+    """Family adds a child, which opens a referral and lands them on its search.
+
+    The child is always owned by ``request.user``; a posted family id is ignored.
+    """
+    if request.method == "POST":
+        form = ChildForm(request.POST)
+        if form.is_valid():
+            child = form.save(commit=False)
+            child.family_id = request.user.pk
+            child.save()
+            Referral.objects.create(
+                child=child,
+                source=Referral.Source.FAMILY,
+                status=Referral.Status.NEW,
+            )
+            messages.success(request, f"Added {child}.")
+            # Land on the new child's provider search. Once Task 12 makes the
+            # search a single view, change this to
+            # reverse("referrals:family_search") + f"?child={child.pk}".
+            return redirect("referrals:family_search", child_pk=child.pk)
+    else:
+        form = ChildForm()
+    return render(request, "referrals/family_add_child.html", {"form": form})
 
 
 @require_POST
