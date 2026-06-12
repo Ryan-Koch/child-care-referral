@@ -216,6 +216,8 @@ class FamilyProviderSearchView(FamilyRequiredMixin, ProviderListView):
     a child" control is the ``family_save_control`` template tag."""
 
     template_name = "referrals/family_provider_search.html"
+    # This *is* the family search — never redirect it (would loop, Task 14).
+    redirect_family_to_search = False
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
@@ -284,6 +286,8 @@ class ReferralProviderSearchView(CoordinatorRequiredMixin, ProviderListView):
     """
 
     template_name = "referrals/provider_search.html"
+    # Coordinator-only search; families never reach it, so don't redirect (Task 14).
+    redirect_family_to_search = False
 
     @cached_property
     def referral(self) -> Referral:

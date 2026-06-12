@@ -14,15 +14,19 @@ from django.db.models import Q
 from django.db.models import Value
 from django.db.models.functions import Cast
 from django.db.models.functions import Replace
+from django.shortcuts import redirect
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import DetailView
 from django.views.generic import ListView
 
 from open_child_care_referral_platform.providers.models import Provider
+from open_child_care_referral_platform.users.roles import FAMILY_GROUP
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
+    from django.http import HttpRequest
+    from django.http import HttpResponseBase
 
 # Columns shown in the detail page header / metadata footer (or rendered in their
 # own section), so they are excluded from the generic "Details" table.
@@ -124,6 +128,27 @@ class ProviderListView(ListView):
     context_object_name = "providers"
     paginate_by = 24
     ordering = ["provider_name"]
+
+    # Families have their own save-enabled search (Task 12); the generic,
+    # save-less catalog redirects them there. Subclasses that *are* the family or
+    # coordinator search opt out below (or a family would redirect to itself).
+    redirect_family_to_search = True
+
+    def dispatch(
+        self,
+        request: HttpRequest,
+        *args: Any,
+        **kwargs: Any,
+    ) -> HttpResponseBase:
+        user = request.user
+        if (
+            self.redirect_family_to_search
+            and user.is_authenticated
+            and user.groups.filter(name=FAMILY_GROUP).exists()
+        ):
+            # Soft, one-way coupling: providers reverses a referrals: URL name.
+            return redirect("referrals:family_search")
+        return super().dispatch(request, *args, **kwargs)
 
     @cached_property
     def selected_state(self) -> str:

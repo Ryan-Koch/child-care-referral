@@ -363,15 +363,17 @@ def test_nav_shows_queue_link_for_coordinator(client) -> None:
 
 @pytest.mark.django_db
 def test_nav_hides_queue_link_for_family(client) -> None:
+    # Families are redirected away from providers:list (Task 14), so inspect the
+    # nav on a page they can actually load.
     client.force_login(make_family())
-    response = client.get(reverse("providers:list"))
+    response = client.get(reverse("referrals:portal"))
     assert reverse("referrals:queue") not in response.content.decode()
 
 
 @pytest.mark.django_db
 def test_nav_shows_my_providers_link_for_family(client) -> None:
     client.force_login(make_family())
-    response = client.get(reverse("providers:list"))
+    response = client.get(reverse("referrals:portal"))
     assert reverse("referrals:my_referrals") in response.content.decode()
 
 
