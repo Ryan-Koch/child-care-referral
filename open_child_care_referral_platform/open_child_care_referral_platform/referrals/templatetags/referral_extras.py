@@ -5,11 +5,13 @@ from typing import Any
 
 from django import template
 
-from open_child_care_referral_platform.referrals.models import Child
-from open_child_care_referral_platform.referrals.models import ReferralProvider
+from open_child_care_referral_platform.referrals.selectors import (
+    default_selected_child_id,
+)
+from open_child_care_referral_platform.referrals.selectors import family_children
+from open_child_care_referral_platform.referrals.selectors import family_saved_child_ids
 
 if TYPE_CHECKING:
-    from django.http import HttpRequest
     from django.template.context import Context
 
     from open_child_care_referral_platform.providers.models import Provider
@@ -22,14 +24,14 @@ def family_save_control(context: Context, provider: Provider) -> dict[str, Any]:
     """Render a "save this provider for one of my children" control.
 
     Shared by the family provider search (Task 12) and the provider detail page
-    (Task 13) so neither template hardcodes the form. Renders nothing for
-    non-family users, an "add a child" prompt for a family with no children, and
-    a child ``<select>`` + Save form otherwise.
+    (Task 13). Renders nothing for non-family users, an "add a child" prompt for
+    a family with no children, and a child ``<select>`` + Save form otherwise.
 
-    ``family_children`` / ``family_saved_map`` are read from the page context
-    when the view precomputed them (the search view does, to stay one query per
-    page); otherwise they're computed here for the single ``provider`` (the
-    detail page, which doesn't know about referrals).
+    The search view precomputes ``family_children`` / ``family_saved_map`` /
+    ``family_selected_child_id`` / ``family_save_next`` so a multi-card page stays
+    one query and computes the picker state once; on the detail page (no such
+    context) each value falls back to a single-provider lookup via the shared
+    ``referrals.selectors`` helpers, so both paths agree.
     """
     if not context.get("is_family"):
         return {"is_family": False}
@@ -38,39 +40,28 @@ def family_save_control(context: Context, provider: Provider) -> dict[str, Any]:
 
     children = context.get("family_children")
     if children is None:
-        children = list(Child.objects.filter(family=user))
+        children = list(family_children(user))
 
     saved_map = context.get("family_saved_map")
     if saved_map is None:
-        saved_child_ids = set(
-            ReferralProvider.objects.filter(
-                referral__child__family=user,
-                provider=provider,
-            ).values_list("referral__child_id", flat=True),
-        )
+        saved_child_ids = family_saved_child_ids(user, provider)
     else:
         saved_child_ids = saved_map.get(provider.pk, set())
 
-    saved_names = [str(c) for c in children if c.pk in saved_child_ids]
+    selected_child_id = context.get("family_selected_child_id")
+    if selected_child_id is None:
+        selected_child_id = default_selected_child_id(
+            request.GET.get("child", ""),
+            children,
+        )
+
     return {
         "is_family": True,
         "provider": provider,
         "children": children,
-        # Pre-joined so the template needs no comma-juggling loop (keeps the
-        # rendered list as "Alice, Bob" without stray whitespace).
-        "saved_children_label": ", ".join(saved_names),
-        "selected_child_id": _selected_child_id(request, children),
-        "next_url": request.get_full_path(),
+        "saved_children_label": ", ".join(
+            str(child) for child in children if child.pk in saved_child_ids
+        ),
+        "selected_child_id": selected_child_id,
+        "next_url": context.get("family_save_next") or request.get_full_path(),
     }
-
-
-def _selected_child_id(request: HttpRequest, children: list[Child]) -> int | None:
-    """The child the dropdown defaults to: the ``?child=`` one when it belongs to
-    this family, else the first child (so a save is never mis-targeted)."""
-    if not children:
-        return None
-    raw = request.GET.get("child", "")
-    child_ids = {child.pk for child in children}
-    if raw.isdigit() and int(raw) in child_ids:
-        return int(raw)
-    return children[0].pk

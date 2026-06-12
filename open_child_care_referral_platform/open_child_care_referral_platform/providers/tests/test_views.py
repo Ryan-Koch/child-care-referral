@@ -1,15 +1,12 @@
 from http import HTTPStatus
 
 import pytest
-from django.contrib.auth.models import Group
 from django.urls import reverse
 
 from open_child_care_referral_platform.providers.models import Inspection
 from open_child_care_referral_platform.providers.models import Provider
-from open_child_care_referral_platform.users.roles import COORDINATOR_GROUP
-from open_child_care_referral_platform.users.roles import FAMILY_GROUP
-from open_child_care_referral_platform.users.roles import ensure_roles
-from open_child_care_referral_platform.users.tests.factories import UserFactory
+from open_child_care_referral_platform.users.tests.factories import make_coordinator
+from open_child_care_referral_platform.users.tests.factories import make_family
 
 
 @pytest.fixture
@@ -588,20 +585,6 @@ def test_va_funding_multiselect_requires_all(client, va_providers):
 
 
 # --- generic search hidden from families (Task 14) -------------------------
-
-
-def make_family():
-    ensure_roles()
-    user = UserFactory.create()
-    user.groups.add(Group.objects.get(name=FAMILY_GROUP))
-    return user
-
-
-def make_coordinator():
-    ensure_roles()
-    user = UserFactory.create()
-    user.groups.add(Group.objects.get(name=COORDINATOR_GROUP))
-    return user
 
 
 @pytest.mark.django_db

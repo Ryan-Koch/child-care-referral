@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from http import HTTPStatus
-from typing import TYPE_CHECKING
 
 import pytest
-from django.contrib.auth.models import Group
 from django.core import mail
 from django.urls import reverse
 
@@ -19,27 +17,8 @@ from open_child_care_referral_platform.referrals.tests.factories import Referral
 from open_child_care_referral_platform.referrals.tests.factories import (
     ReferralProviderFactory,
 )
-from open_child_care_referral_platform.users.roles import COORDINATOR_GROUP
-from open_child_care_referral_platform.users.roles import FAMILY_GROUP
-from open_child_care_referral_platform.users.roles import ensure_roles
-from open_child_care_referral_platform.users.tests.factories import UserFactory
-
-if TYPE_CHECKING:
-    from open_child_care_referral_platform.users.models import User
-
-
-def make_coordinator() -> User:
-    ensure_roles()
-    user = UserFactory.create()
-    user.groups.add(Group.objects.get(name=COORDINATOR_GROUP))
-    return user
-
-
-def make_family() -> User:
-    ensure_roles()
-    user = UserFactory.create()
-    user.groups.add(Group.objects.get(name=FAMILY_GROUP))
-    return user
+from open_child_care_referral_platform.users.tests.factories import make_coordinator
+from open_child_care_referral_platform.users.tests.factories import make_family
 
 
 @pytest.mark.django_db
@@ -595,6 +574,39 @@ def test_family_search_zero_children_prompts_add_child(client) -> None:
 
 
 @pytest.mark.django_db
+def test_family_search_preselects_child_and_preserves_it_in_filter(client) -> None:
+    fam = make_family()
+    client.force_login(fam)
+    child = ChildFactory.create(family=fam, first_name="Pre", last_name="Select")
+    ProviderFactory.create(source_state="OH")
+
+    response = client.get(
+        reverse("referrals:family_search"),
+        {"state": "OH", "child": child.pk},
+    )
+
+    assert response.context["family_selected_child_id"] == child.pk
+    # The filter form round-trips ?child= so narrowing filters keeps the choice.
+    assert f'name="child" value="{child.pk}"' in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_family_search_tolerates_unicode_digit_child_param(client) -> None:
+    # '²'.isdigit() is True but int('²') raises — must not 500 the page render.
+    fam = make_family()
+    client.force_login(fam)
+    ChildFactory.create(family=fam)
+    ProviderFactory.create(source_state="OH")
+
+    response = client.get(
+        reverse("referrals:family_search"),
+        {"state": "OH", "child": "²"},
+    )
+
+    assert response.status_code == HTTPStatus.OK
+
+
+@pytest.mark.django_db
 def test_family_search_forbids_coordinator(client) -> None:
     client.force_login(make_coordinator())
     response = client.get(reverse("referrals:family_search"))
@@ -698,14 +710,16 @@ def test_family_save_provider_404_for_other_familys_child(client) -> None:
 
 
 @pytest.mark.django_db
-def test_family_save_provider_404_for_malformed_child(client) -> None:
+@pytest.mark.parametrize("bad_child", ["not-an-id", "²", ""])
+def test_family_save_provider_404_for_malformed_child(client, bad_child) -> None:
+    # Includes '²' — isdigit() True but int() raises — which must 404, not 500.
     fam = make_family()
     client.force_login(fam)
     provider = ProviderFactory.create()
 
     response = client.post(
         reverse("referrals:family_save_provider"),
-        {"child": "not-an-id", "provider": provider.pk},
+        {"child": bad_child, "provider": provider.pk},
     )
 
     assert response.status_code == HTTPStatus.NOT_FOUND

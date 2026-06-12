@@ -16,12 +16,13 @@ from django.db.models.functions import Cast
 from django.db.models.functions import Replace
 from django.shortcuts import redirect
 from django.utils import timezone
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import DetailView
 from django.views.generic import ListView
 
 from open_child_care_referral_platform.providers.models import Provider
+from open_child_care_referral_platform.users.http import is_safe_next
 from open_child_care_referral_platform.users.roles import FAMILY_GROUP
+from open_child_care_referral_platform.users.roles import user_in_group
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -129,10 +130,11 @@ class ProviderListView(ListView):
     paginate_by = 24
     ordering = ["provider_name"]
 
-    # Families have their own save-enabled search (Task 12); the generic,
-    # save-less catalog redirects them there. Subclasses that *are* the family or
-    # coordinator search opt out below (or a family would redirect to itself).
-    redirect_family_to_search = True
+    # Opt-IN, so it fails safe: only the generic catalog binding turns this on
+    # (see ``provider_list_view`` below). Every subclass — and any future one —
+    # defaults to *not* redirecting, so it can never accidentally bounce a family
+    # away from a page that isn't the save-less catalog.
+    redirect_family_to_search = False
 
     def dispatch(
         self,
@@ -140,13 +142,10 @@ class ProviderListView(ListView):
         *args: Any,
         **kwargs: Any,
     ) -> HttpResponseBase:
-        user = request.user
-        if (
-            self.redirect_family_to_search
-            and user.is_authenticated
-            and user.groups.filter(name=FAMILY_GROUP).exists()
-        ):
-            # Soft, one-way coupling: providers reverses a referrals: URL name.
+        if self.redirect_family_to_search and user_in_group(request.user, FAMILY_GROUP):
+            # Families have their own save-enabled search (Task 12); steer them
+            # off the save-less catalog. Soft, one-way coupling: providers
+            # reverses a referrals: URL name.
             return redirect("referrals:family_search")
         return super().dispatch(request, *args, **kwargs)
 
@@ -414,7 +413,9 @@ class ProviderListView(ListView):
         return context
 
 
-provider_list_view = ProviderListView.as_view()
+# The one place the family redirect is enabled — this binding *is* the generic
+# save-less catalog at ``providers:list``.
+provider_list_view = ProviderListView.as_view(redirect_family_to_search=True)
 
 
 class ProviderDetailView(DetailView):
@@ -441,13 +442,7 @@ class ProviderDetailView(DetailView):
         coupling this app to theirs.
         """
         next_url = self.request.GET.get("next", "")
-        if next_url and url_has_allowed_host_and_scheme(
-            next_url,
-            allowed_hosts={self.request.get_host()},
-            require_https=self.request.is_secure(),
-        ):
-            return next_url
-        return ""
+        return next_url if is_safe_next(self.request, next_url) else ""
 
 
 provider_detail_view = ProviderDetailView.as_view()

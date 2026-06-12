@@ -29,7 +29,6 @@ from django.shortcuts import redirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import DetailView
@@ -46,8 +45,14 @@ from open_child_care_referral_platform.referrals.models import Child
 from open_child_care_referral_platform.referrals.models import Message
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
+from open_child_care_referral_platform.referrals.selectors import (
+    default_selected_child_id,
+)
+from open_child_care_referral_platform.referrals.selectors import family_children
+from open_child_care_referral_platform.referrals.selectors import family_referrals
 from open_child_care_referral_platform.referrals.services import ingest_referral_request
 from open_child_care_referral_platform.users.claims import send_account_claim_email
+from open_child_care_referral_platform.users.http import is_safe_next
 from open_child_care_referral_platform.users.mixins import CoordinatorRequiredMixin
 from open_child_care_referral_platform.users.mixins import FamilyRequiredMixin
 from open_child_care_referral_platform.users.mixins import coordinator_required
@@ -88,16 +93,6 @@ def _format_care_schedule(schedule: dict[str, Any]) -> list[tuple[str, list[str]
                 labels.append(str(time_range))
         rows.append((str(day), labels))
     return rows
-
-
-def family_children(user) -> QuerySet[Child]:
-    """Children owned by ``user`` — the basis for family ownership scoping."""
-    return Child.objects.filter(family=user)
-
-
-def family_referrals(user) -> QuerySet[Referral]:
-    """Referrals for ``user``'s children."""
-    return Referral.objects.filter(child__family=user)
 
 
 # --- messaging (Task 10) --------------------------------------------------
@@ -216,13 +211,12 @@ class FamilyProviderSearchView(FamilyRequiredMixin, ProviderListView):
     a child" control is the ``family_save_control`` template tag."""
 
     template_name = "referrals/family_provider_search.html"
-    # This *is* the family search — never redirect it (would loop, Task 14).
-    redirect_family_to_search = False
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        context["family_children"] = list(family_children(user))
+        children = list(family_children(user))
+        context["family_children"] = children
         # One query for the page: which of the family's children already saved
         # each provider shown, so cards can say "Saved for …" without N queries.
         page_provider_ids = [provider.pk for provider in context["providers"]]
@@ -234,6 +228,12 @@ class FamilyProviderSearchView(FamilyRequiredMixin, ProviderListView):
         for provider_id, child_id in rows:
             saved_map.setdefault(provider_id, set()).add(child_id)
         context["family_saved_map"] = saved_map
+        # Page-level values the save control would otherwise recompute per card.
+        context["family_selected_child_id"] = default_selected_child_id(
+            self.request.GET.get("child", ""),
+            children,
+        )
+        context["family_save_next"] = self.request.get_full_path()
         return context
 
 
@@ -286,8 +286,6 @@ class ReferralProviderSearchView(CoordinatorRequiredMixin, ProviderListView):
     """
 
     template_name = "referrals/provider_search.html"
-    # Coordinator-only search; families never reach it, so don't redirect (Task 14).
-    redirect_family_to_search = False
 
     @cached_property
     def referral(self) -> Referral:
@@ -477,12 +475,13 @@ def family_add_child_view(request: HttpRequest) -> HttpResponse:
 
 
 def _posted_id(request: HttpRequest, key: str) -> int:
-    """A positive-int POST value, or a 404 — POST ids are untrusted (no URL
-    converter validates them), so malformed input is a clean 404 not a 500."""
-    raw = request.POST.get(key, "")
-    if not raw.isdigit():
-        raise Http404
-    return int(raw)
+    """An int POST value, or a 404 — POST ids are untrusted (no URL converter
+    validates them), so anything ``int()`` rejects (missing, non-numeric, or a
+    Unicode digit like "²") is a clean 404, never a 500."""
+    try:
+        return int(request.POST.get(key, ""))
+    except (TypeError, ValueError) as exc:
+        raise Http404 from exc
 
 
 def _family_save_redirect(request: HttpRequest, child: Child) -> str:
@@ -490,11 +489,7 @@ def _family_save_redirect(request: HttpRequest, child: Child) -> str:
     (``next``, filters preserved) with the just-saved child kept selected.
     Falls back to the search; an off-site ``next`` is rejected."""
     next_url = request.POST.get("next", "")
-    if not next_url or not url_has_allowed_host_and_scheme(
-        next_url,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
+    if not is_safe_next(request, next_url):
         next_url = reverse("referrals:family_search")
     # Keep the saved child selected without collapsing multi-value filters
     # (e.g. ?sc_program=a&sc_program=b), so QueryDict rather than a plain dict.
