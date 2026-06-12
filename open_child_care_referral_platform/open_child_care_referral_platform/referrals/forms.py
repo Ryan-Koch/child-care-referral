@@ -1,8 +1,38 @@
 from django import forms
 
+from open_child_care_referral_platform.referrals.models import Child
 from open_child_care_referral_platform.referrals.models import Message
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.models import ReferralProvider
+
+
+class ChildForm(forms.ModelForm):
+    """Family-facing "add a child" form — just the basics needed to identify a
+    child and open a referral. Care schedule / school stay with coordinators and
+    ingestion for now (Task 09 follow-up), so they are deliberately left off.
+    """
+
+    class Meta:
+        model = Child
+        fields = [
+            "first_name",
+            "last_name",
+            "date_of_birth",
+            "relationship",
+            "in_school",
+        ]
+        widgets = {
+            # A native date picker; the model field already stores a real date.
+            "date_of_birth": forms.DateInput(
+                attrs={"type": "date"},
+                format="%Y-%m-%d",
+            ),
+        }
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # The model allows a blank name, but a child the family adds needs one.
+        self.fields["first_name"].required = True
 
 
 class ReferralNotesForm(forms.ModelForm):

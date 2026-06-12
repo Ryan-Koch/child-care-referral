@@ -5,6 +5,10 @@ to whichever page renders it. All context vars come from ProviderListView
 (and its subclasses).
 {% endcomment %}
 <form method="get" class="card card-body shadow-sm mb-4">
+  {# Preserve a pre-selected child across filter submits (family search). #}
+  {% if request.GET.child %}
+    <input type="hidden" name="child" value="{{ request.GET.child }}" />
+  {% endif %}
   <div class="row g-3 mb-3">
     <div class="col-md-8">
       <label for="search-input" class="form-label mb-1">Search by name</label>

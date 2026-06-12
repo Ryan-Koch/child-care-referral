@@ -5,6 +5,8 @@ from django.urls import reverse
 
 from open_child_care_referral_platform.providers.models import Inspection
 from open_child_care_referral_platform.providers.models import Provider
+from open_child_care_referral_platform.users.tests.factories import make_coordinator
+from open_child_care_referral_platform.users.tests.factories import make_family
 
 
 @pytest.fixture
@@ -580,3 +582,57 @@ def test_va_funding_multiselect_requires_all(client, va_providers):
 
     names = [provider.provider_name for provider in response.context["providers"]]
     assert names == ["Meets Place"]
+
+
+# --- generic search hidden from families (Task 14) -------------------------
+
+
+@pytest.mark.django_db
+def test_list_redirects_family_to_family_search(client):
+    client.force_login(make_family())
+    response = client.get(reverse("providers:list"))
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url == reverse("referrals:family_search")
+
+
+@pytest.mark.django_db
+def test_list_allows_coordinator(client):
+    client.force_login(make_coordinator())
+    assert client.get(reverse("providers:list")).status_code == HTTPStatus.OK
+
+
+@pytest.mark.django_db
+def test_list_allows_anonymous(client):
+    assert client.get(reverse("providers:list")).status_code == HTTPStatus.OK
+
+
+@pytest.mark.django_db
+def test_family_search_is_not_redirected(client):
+    # The family search subclass opts out, so a family is not bounced from it.
+    client.force_login(make_family())
+    response = client.get(reverse("referrals:family_search"))
+    assert response.status_code == HTTPStatus.OK
+
+
+@pytest.mark.django_db
+def test_detail_is_not_redirected_for_family(client, provider):
+    # The detail page keeps its (Task 13) save control — never redirect it.
+    client.force_login(make_family())
+    response = client.get(reverse("providers:detail", kwargs={"pk": provider.pk}))
+    assert response.status_code == HTTPStatus.OK
+
+
+@pytest.mark.django_db
+def test_nav_hides_generic_providers_for_family(client):
+    client.force_login(make_family())
+    content = client.get(reverse("referrals:my_referrals")).content.decode()
+    assert "Find providers" in content
+    assert f'href="{reverse("providers:list")}"' not in content
+
+
+@pytest.mark.django_db
+def test_nav_shows_generic_providers_for_coordinator(client):
+    client.force_login(make_coordinator())
+    content = client.get(reverse("referrals:queue")).content.decode()
+    assert f'href="{reverse("providers:list")}"' in content
+    assert "Find providers" not in content
