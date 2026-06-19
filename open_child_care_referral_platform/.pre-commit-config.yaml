@@ -1,4 +1,7 @@
-exclude: '^docs/|/migrations/|devcontainer.json'
+# Patterns are matched against paths relative to the git root. Because the
+# project lives in a subdirectory, anchor "docs" with (^|/) so it matches both
+# a top-level docs/ and open_child_care_referral_platform/docs/.
+exclude: '(^|/)docs/|/migrations/|devcontainer.json'
 default_stages: [pre-commit]
 minimum_pre_commit_version: "3.2.0"
 
