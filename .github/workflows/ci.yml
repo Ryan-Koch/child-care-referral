@@ -7,9 +7,9 @@ env:
 
 # NOTE: The Django project lives in the open_child_care_referral_platform/
 # subdirectory, but GitHub Actions only discovers workflows at the repo root.
-# This workflow therefore lives at the root and reaches into the subdirectory:
-# `run` steps use the job-level working-directory default, and the bake steps
-# reference the compose files by their full path from the repo root.
+# This workflow therefore lives at the root; each job sets a working-directory
+# default of the project dir so `docker compose` finds its files and the
+# compose-relative env_file paths (./.envs/...) resolve correctly.
 
 on:
   pull_request:
@@ -63,31 +63,8 @@ jobs:
       - name: Checkout Code Repository
         uses: actions/checkout@v6
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and cache local backend
-        uses: docker/bake-action@v6
-        with:
-          push: false
-          load: true
-          files: open_child_care_referral_platform/docker-compose.local.yml
-          targets: django
-          set: |
-            django.cache-from=type=gha,scope=django-cached-tests
-            django.cache-to=type=gha,scope=django-cached-tests,mode=max
-            postgres.cache-from=type=gha,scope=postgres-cached-tests
-            postgres.cache-to=type=gha,scope=postgres-cached-tests,mode=max
-
-      - name: Build and cache docs
-        uses: docker/bake-action@v6
-        with:
-          push: false
-          load: true
-          files: open_child_care_referral_platform/docker-compose.docs.yml
-          set: |
-            docs.cache-from=type=gha,scope=cached-docs
-            docs.cache-to=type=gha,scope=cached-docs,mode=max
+      - name: Build the Stack
+        run: docker compose -f docker-compose.local.yml build
 
       - name: Check DB Migrations
         run: docker compose -f docker-compose.local.yml run --rm django python manage.py makemigrations --check
