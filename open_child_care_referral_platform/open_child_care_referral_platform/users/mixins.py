@@ -18,6 +18,7 @@ from django.core.exceptions import PermissionDenied
 
 from open_child_care_referral_platform.users.roles import COORDINATOR_GROUP
 from open_child_care_referral_platform.users.roles import FAMILY_GROUP
+from open_child_care_referral_platform.users.roles import user_in_group
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -37,9 +38,7 @@ class _GroupRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
 
     def test_func(self) -> bool:
         user = self.request.user
-        return user.is_authenticated and (
-            user.is_superuser or user.groups.filter(name=self.group_name).exists()
-        )
+        return user.is_superuser or user_in_group(user, self.group_name)
 
 
 class CoordinatorRequiredMixin(_GroupRequiredMixin):
@@ -67,7 +66,7 @@ def _require_group(
             user = request.user
             if not user.is_authenticated:
                 return redirect_to_login(request.get_full_path())
-            if not (user.is_superuser or user.groups.filter(name=group_name).exists()):
+            if not (user.is_superuser or user_in_group(user, group_name)):
                 raise PermissionDenied
             return view_func(request, *args, **kwargs)
 

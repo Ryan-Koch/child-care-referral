@@ -77,15 +77,20 @@
             <li class="nav-item">
               <a class="nav-link" href="{% url 'about' %}">About</a>
             </li>
-            <li class="nav-item">
-              <a class="nav-link" href="{% url 'providers:list' %}">Providers</a>
-            </li>
+            {% if not is_family %}
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'providers:list' %}">Providers</a>
+              </li>
+            {% endif %}
             {% if is_coordinator %}
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'referrals:queue' %}">Referral queue</a>
               </li>
             {% endif %}
             {% if is_family %}
+              <li class="nav-item">
+                <a class="nav-link" href="{% url 'referrals:family_search' %}">Find providers</a>
+              </li>
               <li class="nav-item">
                 <a class="nav-link" href="{% url 'referrals:my_referrals' %}">My providers
                   {% if unread_message_count %}
