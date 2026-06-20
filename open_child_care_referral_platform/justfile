@@ -40,3 +40,7 @@ manage +args:
 # pytest: Run tests with pytest.
 pytest *args:
     @docker compose run --rm django pytest {{args}}
+
+# lint: Run pre-commit hooks (ruff, djlint, etc.) on all files.
+lint *args:
+    @pre-commit run --all-files {{args}}

@@ -1,4 +1,5 @@
 {% load provider_extras %}
+
 {% if value|is_mapping %}
   <dl class="row mb-0 small">
     {% for key, item in value.items %}
@@ -12,9 +13,7 @@
   {% if value %}
     <ul class="list-unstyled mb-0">
       {% for item in value %}
-        <li class="mb-1">
-          {% include "providers/_data_value.html" with value=item %}
-        </li>
+        <li class="mb-1">{% include "providers/_data_value.html" with value=item %}</li>
       {% endfor %}
     </ul>
   {% else %}

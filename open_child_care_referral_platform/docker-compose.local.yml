@@ -1,7 +1,7 @@
 volumes:
   open_child_care_referral_platform_local_postgres_data: {}
   open_child_care_referral_platform_local_postgres_data_backups: {}
-  
+
 
 services:
   django:

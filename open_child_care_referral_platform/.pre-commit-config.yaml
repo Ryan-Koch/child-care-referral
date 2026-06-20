@@ -29,7 +29,9 @@ repos:
     rev: '1.30.0'
     hooks:
       - id: django-upgrade
-        args: ['--target-version', '6.0']
+        # Target 5.2, not 6.0: the 6.0 fixer deletes the (still-wanted) global
+        # DEFAULT_AUTO_FIELD setting, since 6.0 makes BigAutoField the default.
+        args: ['--target-version', '5.2']
 
   # Run the Ruff linter.
   - repo: https://github.com/astral-sh/ruff-pre-commit
