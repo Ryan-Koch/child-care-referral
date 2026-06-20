@@ -16,25 +16,19 @@
       <li class="breadcrumb-item">
         <a href="{% url 'providers:list' %}">Providers</a>
       </li>
-      <li class="breadcrumb-item active" aria-current="page">
-        {{ provider.provider_name|default:"Provider" }}
-      </li>
+      <li class="breadcrumb-item active" aria-current="page">{{ provider.provider_name|default:"Provider" }}</li>
     </ol>
   </nav>
   <div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
     <div>
-      <h1 class="h3 mb-1">
-        {{ provider.provider_name|default:"Unnamed provider" }}
-      </h1>
+      <h1 class="h3 mb-1">{{ provider.provider_name|default:"Unnamed provider" }}</h1>
       {% if provider.provider_type %}
         <div class="text-muted">{{ provider.provider_type }}</div>
       {% endif %}
     </div>
     <div class="text-end">
       {% if provider.status %}
-        <span class="badge rounded-pill text-bg-secondary">
-          {{ provider.status }}
-        </span>
+        <span class="badge rounded-pill text-bg-secondary">{{ provider.status }}</span>
       {% endif %}
       {% if provider.source_state %}
         <div class="text-muted small mt-1">
@@ -54,9 +48,7 @@
   {% if provider.provider_url %}
     <p class="mb-4">
       <i class="bi bi-link-45deg me-1"></i>
-      <a href="{{ provider.provider_url }}" target="_blank" rel="noopener">
-        {{ provider.provider_url }}
-      </a>
+      <a href="{{ provider.provider_url }}" target="_blank" rel="noopener">{{ provider.provider_url }}</a>
     </p>
   {% endif %}
   <div class="card shadow-sm mb-4">
@@ -64,9 +56,7 @@
     <div class="card-body">
       <dl class="row mb-0">
         {% for label, field_value in core_fields %}
-          <dt class="col-sm-3 text-muted fw-normal text-capitalize">
-            {{ label }}
-          </dt>
+          <dt class="col-sm-3 text-muted fw-normal text-capitalize">{{ label }}</dt>
           <dd class="col-sm-9">
             {% include "providers/_data_value.html" with value=field_value %}
           </dd>
@@ -97,25 +87,31 @@
         <dl class="row mb-0 small">
           {% if inspection.original_status %}
             <dt class="col-sm-3 text-muted fw-normal">Original status</dt>
-            <dd class="col-sm-9">{{ inspection.original_status }}</dd>
+            <dd class="col-sm-9">
+              {{ inspection.original_status }}
+            </dd>
           {% endif %}
           {% if inspection.corrective_status %}
             <dt class="col-sm-3 text-muted fw-normal">Corrective status</dt>
-            <dd class="col-sm-9">{{ inspection.corrective_status }}</dd>
+            <dd class="col-sm-9">
+              {{ inspection.corrective_status }}
+            </dd>
           {% endif %}
           {% if inspection.status_updated %}
             <dt class="col-sm-3 text-muted fw-normal">Status updated</dt>
-            <dd class="col-sm-9">{{ inspection.status_updated }}</dd>
+            <dd class="col-sm-9">
+              {{ inspection.status_updated }}
+            </dd>
           {% endif %}
           {% if inspection.report_url %}
             <dt class="col-sm-3 text-muted fw-normal">Report</dt>
-            <dd class="col-sm-9 text-break">{{ inspection.report_url }}</dd>
+            <dd class="col-sm-9 text-break">
+              {{ inspection.report_url }}
+            </dd>
           {% endif %}
         </dl>
         {% if inspection.state_data %}
-          <div class="mt-2">
-            {% include "providers/_data_value.html" with value=inspection.state_data %}
-          </div>
+          <div class="mt-2">{% include "providers/_data_value.html" with value=inspection.state_data %}</div>
         {% endif %}
       </div>
     </div>

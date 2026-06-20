@@ -1,0 +1,79 @@
+name: CI
+
+# Enable Buildkit and let compose use it to speed up image building
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+# NOTE: The Django project lives in the open_child_care_referral_platform/
+# subdirectory, but GitHub Actions only discovers workflows at the repo root.
+# This workflow therefore lives at the root; each job sets a working-directory
+# default of the project dir so `docker compose` finds its files and the
+# compose-relative env_file paths (./.envs/...) resolve correctly.
+
+on:
+  pull_request:
+    branches: ['main']
+    paths-ignore: ['open_child_care_referral_platform/docs/**']
+
+  push:
+    branches: ['main']
+    paths-ignore: ['open_child_care_referral_platform/docs/**']
+
+concurrency:
+  group: ${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  linter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: open_child_care_referral_platform
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: 'open_child_care_referral_platform/.python-version'
+
+      - name: Cache pre-commit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('open_child_care_referral_platform/.pre-commit-config.yaml') }}
+
+      - name: Install pre-commit
+        run: python -m pip install pre-commit
+
+      # Run from the project directory so config discovery matches local dev.
+      - name: Run pre-commit
+        run: pre-commit run --show-diff-on-failure --color=always --all-files
+
+  # With no caching at all the entire ci process takes 3m to complete!
+  pytest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: open_child_care_referral_platform
+
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v6
+
+      - name: Build the Stack
+        run: docker compose -f docker-compose.local.yml build
+
+      - name: Check DB Migrations
+        run: docker compose -f docker-compose.local.yml run --rm django python manage.py makemigrations --check
+
+      - name: Run DB Migrations
+        run: docker compose -f docker-compose.local.yml run --rm django python manage.py migrate
+
+      - name: Run Django Tests
+        run: docker compose -f docker-compose.local.yml run django pytest
+
+      - name: Tear down the Stack
+        run: docker compose -f docker-compose.local.yml down

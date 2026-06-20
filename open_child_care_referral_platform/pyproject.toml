@@ -1,5 +1,5 @@
 [project]
-name = "open_child_care_referral_platform"
+name = "open-child-care-referral-platform"
 version = "0.1.0"
 description = "Open Child Care Referral Platform"
 readme = "README.md"
@@ -56,27 +56,30 @@ dev = [
 
 # ==== djLint ====
 [tool.djlint]
+profile = "django"
+include = "H017,H035"
+indent = 2
+max_line_length = 119
 blank_line_after_tag = "load,extends"
 close_void_tags = true
 format_css = true
 format_js = true
 # TODO: remove T002 when fixed https://github.com/djlint/djLint/issues/687
 ignore = "H006,H030,H031,T002"
-include = "H017,H035"
-indent = 2
-max_line_length = 119
-profile = "django"
 css.indent_size = 2
 js.indent_size = 2
 
 # ==== ruff ====
 [tool.ruff]
+# Pinned one minor below requires-python (3.14) on purpose: at py314 the
+# formatter rewrites `except (A, B):` to PEP 758's `except A, B:` (valid only
+# on 3.14). py313 keeps the conventional parenthesized form.
+target-version = "py313"
 # Exclude a variety of commonly ignored directories.
 extend-exclude = [
   "*/migrations/*.py",
   "staticfiles/*",
 ]
-
 lint.select = [
   "A",
   "ASYNC",
@@ -135,20 +138,38 @@ lint.ignore = [
   # Deactivated because it can make the code slow:
   # https://github.com/astral-sh/ruff/issues/7871
 ]
-lint.isort.force-single-line = true
+lint.per-file-ignores."**/apps.py" = [
+  "PLC0415",
+]
 # Providers stores raw scraped data: NULL on text fields distinguishes "field
 # absent in the source" from "scraped as an empty string", so allow null=True here.
 lint.per-file-ignores."**/providers/models.py" = [
   "DJ001",
 ]
-
-lint.per-file-ignores."**/apps.py" = [
-  "PLC0415",
-]
+lint.isort.force-single-line = true
 
 # ==== pyproject-fmt ====
 [tool.pyproject-fmt]
 keep_full_version = true
+
+# ==== mypy ====
+[tool.mypy]
+ignore_missing_imports = true
+python_version = "3.14"
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+plugins = [
+  "mypy_django_plugin.main",
+]
+warn_unused_configs = true
+overrides = [
+  # Django migrations should not produce any errors:
+  { module = "*.migrations.*", ignore_errors = true },
+]
+
+[tool.django-stubs]
+django_settings_module = "config.settings.test"
 
 # ==== pytest ====
 [tool.pytest]
@@ -163,28 +184,8 @@ python_files = [
   "test_*.py",
 ]
 
+[tool.coverage]
 # ==== Coverage ====
-[tool.coverage.run]
-include = [ "open_child_care_referral_platform/**" ]
-omit = [ "*/migrations/*", "*/tests/*" ]
-plugins = [ "django_coverage_plugin" ]
-
-# ==== mypy ====
-[tool.mypy]
-python_version = "3.14"
-check_untyped_defs = true
-ignore_missing_imports = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-warn_unused_configs = true
-plugins = [
-  "mypy_django_plugin.main",
-]
-
-[[tool.mypy.overrides]]
-# Django migrations should not produce any errors:
-module = "*.migrations.*"
-ignore_errors = true
-
-[tool.django-stubs]
-django_settings_module = "config.settings.test"
+run.include = [ "open_child_care_referral_platform/**" ]
+run.omit = [ "*/migrations/*", "*/tests/*" ]
+run.plugins = [ "django_coverage_plugin" ]
