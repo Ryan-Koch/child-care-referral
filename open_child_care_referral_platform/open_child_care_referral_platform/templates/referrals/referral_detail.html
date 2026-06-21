@@ -8,8 +8,6 @@
 {% endblock title %}
 {% block css %}
   {{ block.super }}
-  {# Compass fonts load globally from base.html; compass_search.css carries the
-     palette tokens + shared .compass-btn / .compass-select used below. #}
   <link href="{% static 'css/compass_search.css' %}" rel="stylesheet" />
   <link href="{% static 'css/compass_referral.css' %}" rel="stylesheet" />
 {% endblock css %}
