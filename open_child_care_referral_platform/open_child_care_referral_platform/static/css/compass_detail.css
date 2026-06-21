@@ -94,6 +94,7 @@
 }
 
 .cd-hero__body {
+  position: relative;
   padding: 0 24px 22px;
 }
 
