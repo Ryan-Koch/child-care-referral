@@ -1,135 +1,165 @@
 {% extends "base.html" %}
 
+{% load static %}
+{% load referral_extras %}
+
 {% block title %}
   Referral queue
 {% endblock title %}
+{% block css %}
+  {{ block.super }}
+  {# Compass fonts load globally from base.html. #}
+  <link href="{% static 'css/compass_queue.css' %}" rel="stylesheet" />
+{% endblock css %}
 {% block content %}
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Referral queue</h1>
-    <span class="text-muted">{{ paginator.count }} shown</span>
-  </div>
-  <form method="get" class="card card-body shadow-sm mb-4">
-    <div class="row g-3 align-items-end">
-      <div class="col-12 col-sm-6 col-lg-4">
-        <label for="status-select" class="form-label mb-1">Status</label>
-        <select id="status-select"
-                name="status"
-                class="form-select"
-                onchange="this.form.submit()">
-          <option value="">Active (new, assigned, in progress)</option>
-          {% for value, label in status_choices %}
-            <option value="{{ value }}"
-                    {% if value == selected_status %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-auto">
-        <div class="form-check">
-          <input id="mine-check"
-                 type="checkbox"
-                 name="mine"
-                 value="1"
-                 class="form-check-input"
-                 onchange="this.form.submit()"
-                 {% if mine %}checked{% endif %} />
-          <label for="mine-check" class="form-check-label">Assigned to me</label>
-        </div>
-      </div>
-      <div class="col-auto">
-        <div class="form-check">
-          <input id="help-check"
-                 type="checkbox"
-                 name="help"
-                 value="1"
-                 class="form-check-input"
-                 onchange="this.form.submit()"
-                 {% if help_only %}checked{% endif %} />
-          <label for="help-check" class="form-check-label">Needs help only</label>
-        </div>
-      </div>
-      <div class="col"></div>
-      <div class="col-auto">
-        <button type="submit" class="btn btn-primary">Filter</button>
+  <div class="compass-queue">
+    <div class="rq-header">
+      <div>
+        <h1 class="rq-title">Referral queue</h1>
+        <div class="rq-subtitle">Families waiting to be matched with child care</div>
       </div>
     </div>
-  </form>
-  <div class="table-responsive">
-    <table class="table table-hover align-middle">
-      <thead>
-        <tr>
-          <th scope="col">Child</th>
-          <th scope="col">Family</th>
-          <th scope="col">Status</th>
-          <th scope="col">Assignee</th>
-          <th scope="col">Source</th>
-          <th scope="col">Created</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for referral in referrals %}
-          <tr>
-            <td>
-              <a href="{% url 'referrals:detail' referral.pk %}">{{ referral.child }}</a>
-              {% if referral.help_requested %}
-                <span class="badge text-bg-warning ms-1">Needs help</span>
-              {% endif %}
-              {% if referral.unread_family_messages %}
-                <span class="badge text-bg-danger ms-1"
-                      title="Unread messages from the family">{{ referral.unread_family_messages }} new</span>
-              {% endif %}
-            </td>
-            <td>
-              <div>{{ referral.child.family.name|default:"—" }}</div>
-              <div class="text-muted small">{{ referral.child.family.email }}</div>
-            </td>
-            <td>
-              <span class="badge text-bg-secondary">{{ referral.get_status_display }}</span>
-            </td>
-            <td>
-              {% if referral.coordinator %}
-                {{ referral.coordinator.name|default:referral.coordinator.email }}
-              {% else %}
-                <span class="badge text-bg-light text-muted">Unassigned</span>
-              {% endif %}
-            </td>
-            <td class="text-muted small">{{ referral.get_source_display }}</td>
-            <td class="text-muted small">{{ referral.created|date:"Y-m-d" }}</td>
-          </tr>
-        {% empty %}
-          <tr>
-            <td colspan="6" class="text-muted">No referrals match these filters.</td>
-          </tr>
+    <!-- stat tiles (quick filters) -->
+    <div class="rq-tiles">
+      {% for tile in tiles %}
+        <a class="rq-tile{% if tile.active %} is-active{% endif %}"
+           href="{{ tile.url }}">
+          <div class="rq-tile__top">
+            <span class="rq-tile__icon rq-tile__icon--{{ tile.variant }}"><i class="{{ tile.icon }}"></i></span>
+            {% if tile.active %}<span class="rq-tile__flag"><i class="bi bi-funnel-fill"></i>Filtered</span>{% endif %}
+          </div>
+          <div class="rq-tile__value rq-tile__value--{{ tile.variant }}">{{ tile.value }}</div>
+          <div class="rq-tile__label">{{ tile.label }}</div>
+        </a>
+      {% endfor %}
+    </div>
+    <!-- toolbar -->
+    <div class="rq-toolbar">
+      <form method="get" class="rq-search" role="search">
+        <i class="bi bi-search"></i>
+        <input type="text"
+               name="q"
+               value="{{ query }}"
+               class="rq-input"
+               placeholder="Search child, family, or email"
+               aria-label="Search referrals" />
+        {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}" />{% endif %}
+        {% if mine %}<input type="hidden" name="mine" value="1" />{% endif %}
+        {% if help_only %}<input type="hidden" name="help" value="1" />{% endif %}
+        {% if unassigned_only %}<input type="hidden" name="unassigned" value="1" />{% endif %}
+        {% if sort %}<input type="hidden" name="sort" value="{{ sort }}" />{% endif %}
+      </form>
+      <div class="rq-segmented">
+        {% for seg in status_segments %}
+          <a class="rq-seg{% if seg.active %} is-active{% endif %}"
+             href="{{ seg.url }}">{{ seg.label }}</a>
         {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% if is_paginated %}
-    <nav aria-label="Referral pages" class="mt-4">
-      <ul class="pagination justify-content-center">
+      </div>
+      <a class="rq-toggle{% if mine %} is-active{% endif %}"
+         href="{{ mine_url }}">
+        <i class="bi bi-person-check"></i>Assigned to me
+      </a>
+      <form method="get" class="rq-sort">
+        <span class="rq-sort__label">Sort</span>
+        <select name="sort"
+                class="rq-select"
+                aria-label="Sort referrals"
+                onchange="this.form.submit()">
+          <option value="priority" {% if sort == "priority" %}selected{% endif %}>Needs help first</option>
+          <option value="oldest" {% if sort == "oldest" %}selected{% endif %}>Oldest first</option>
+          <option value="newest" {% if sort == "newest" %}selected{% endif %}>Newest first</option>
+          <option value="status" {% if sort == "status" %}selected{% endif %}>By status</option>
+        </select>
+        {% if query %}<input type="hidden" name="q" value="{{ query }}" />{% endif %}
+        {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}" />{% endif %}
+        {% if mine %}<input type="hidden" name="mine" value="1" />{% endif %}
+        {% if help_only %}<input type="hidden" name="help" value="1" />{% endif %}
+        {% if unassigned_only %}<input type="hidden" name="unassigned" value="1" />{% endif %}
+      </form>
+    </div>
+    <!-- results count -->
+    <div class="rq-resultsbar">
+      <span class="rq-resultsbar__count"><b>{{ paginator.count }}</b> of {{ total_count }} referrals</span>
+      {% if has_filters %}<a class="rq-clear" href="{{ clear_url }}">Clear filters</a>{% endif %}
+    </div>
+    <!-- column header -->
+    <div class="rq-colhead">
+      <span>Child &amp; family</span>
+      <span>Care needed</span>
+      <span>Status</span>
+      <span>Assignee</span>
+      <span>Waiting</span>
+    </div>
+    <!-- rows -->
+    <div class="rq-rows">
+      {% for referral in referrals %}
+        {% with row=referral|queue_row %}
+          <a class="rq-row{% if row.needs_help %} rq-row--help{% endif %}"
+             href="{% url 'referrals:detail' referral.pk %}">
+            <div class="rq-cell rq-cell--child">
+              <div class="rq-child">
+                <span class="rq-child__name">{{ row.child }}</span>
+                {% if row.needs_help %}
+                  <span class="rq-helpflag"><i class="bi bi-exclamation-triangle-fill"></i>Needs help</span>
+                {% endif %}
+                {% if referral.unread_family_messages %}
+                  <span class="rq-unread" title="Unread messages from the family">{{ referral.unread_family_messages }} new</span>
+                {% endif %}
+              </div>
+              <div class="rq-sub">{{ row.family }} · {{ row.email }}</div>
+            </div>
+            <div class="rq-cell">
+              <div class="rq-care__age">
+                <i class="{{ row.age_icon }}"></i>{{ row.age_label }}
+              </div>
+              <div class="rq-care__detail">{{ row.care_detail }}</div>
+            </div>
+            <div class="rq-cell">
+              <span class="rq-status {{ row.status_class }}"><span class="rq-status__dot"></span>{{ row.status_label }}</span>
+            </div>
+            <div class="rq-cell">
+              {% if row.assigned %}
+                <span class="rq-assignee">
+                  <span class="rq-avatar {{ row.avatar_class }}">{{ row.initials }}</span>
+                  <span class="rq-assignee__name">{{ row.assignee }}</span>
+                </span>
+              {% else %}
+                <span class="rq-assign" title="Unassigned"><i class="bi bi-person-plus"></i>Assign</span>
+              {% endif %}
+            </div>
+            <div class="rq-cell">
+              <div class="rq-wait{% if row.urgent %} rq-wait--urgent{% endif %}">{{ row.waiting_label }}</div>
+              <div class="rq-source">{{ row.source_label }}</div>
+            </div>
+            <div class="rq-chevron">
+              <i class="bi bi-chevron-right"></i>
+            </div>
+          </a>
+        {% endwith %}
+      {% empty %}
+        <div class="rq-empty">
+          <i class="bi bi-inbox"></i>
+          <div class="rq-empty__title">No referrals match these filters</div>
+          <div class="rq-empty__hint">Try clearing a filter or widening the status.</div>
+        </div>
+      {% endfor %}
+    </div>
+    {% if is_paginated %}
+      <nav class="rq-pagenav" aria-label="Referral pages">
         {% if page_obj.has_previous %}
-          <li class="page-item">
-            <a class="page-link"
-               href="{% querystring page=page_obj.previous_page_number %}">Previous</a>
-          </li>
+          <a class="rq-pagebtn"
+             href="{% querystring page=page_obj.previous_page_number %}">Previous</a>
         {% else %}
-          <li class="page-item disabled">
-            <span class="page-link">Previous</span>
-          </li>
+          <span class="rq-pagebtn is-disabled">Previous</span>
         {% endif %}
-        <li class="page-item disabled">
-          <span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
-        </li>
+        <span class="rq-pagenav__status">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
         {% if page_obj.has_next %}
-          <li class="page-item">
-            <a class="page-link"
-               href="{% querystring page=page_obj.next_page_number %}">Next</a>
-          </li>
+          <a class="rq-pagebtn"
+             href="{% querystring page=page_obj.next_page_number %}">Next</a>
         {% else %}
-          <li class="page-item disabled">
-            <span class="page-link">Next</span>
-          </li>
+          <span class="rq-pagebtn is-disabled">Next</span>
         {% endif %}
-      </ul>
-    </nav>
-  {% endif %}
+      </nav>
+    {% endif %}
+  </div>
 {% endblock content %}

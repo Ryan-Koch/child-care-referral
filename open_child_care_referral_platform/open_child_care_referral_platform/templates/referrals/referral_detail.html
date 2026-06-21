@@ -1,213 +1,370 @@
 {% extends "base.html" %}
 
+{% load static %}
+{% load referral_extras %}
+
 {% block title %}
   Referral · {{ referral.child }}
 {% endblock title %}
+{% block css %}
+  {{ block.super }}
+  <link href="{% static 'css/compass_search.css' %}" rel="stylesheet" />
+  <link href="{% static 'css/compass_referral.css' %}" rel="stylesheet" />
+{% endblock css %}
+{% block javascript %}
+  {{ block.super }}
+  <script defer src="{% static 'js/compass_referral.js' %}"></script>
+{% endblock javascript %}
 {% block content %}
-  <nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item">
-        <a href="{% url 'referrals:queue' %}">Referral queue</a>
-      </li>
-      <li class="breadcrumb-item active" aria-current="page">{{ referral.child }}</li>
-    </ol>
-  </nav>
-  <div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
-    <div>
-      <h1 class="h3 mb-1">{{ referral.child }}</h1>
-      <span class="badge text-bg-secondary">{{ referral.get_status_display }}</span>
-      <span class="text-muted small ms-1">{{ referral.get_source_display }}</span>
-      {% if referral.help_requested %}
-        <span class="badge text-bg-warning ms-1">Needs help</span>
-      {% endif %}
+  <div class="compass compass-referral">
+    <!-- breadcrumb -->
+    <div class="rd-breadcrumb">
+      <a href="{% url 'referrals:queue' %}"><i class="bi bi-arrow-left"></i>Referral queue</a>
+      <i class="bi bi-chevron-right rd-breadcrumb__sep"></i>
+      <span class="rd-breadcrumb__here">{{ referral.child }}</span>
     </div>
-    <div class="text-end">
-      {% if referral.coordinator %}
-        <div class="text-muted small">Assigned to {{ referral.coordinator.name|default:referral.coordinator.email }}</div>
-      {% else %}
-        <form method="post" action="{% url 'referrals:claim' referral.pk %}">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-primary">Claim this referral</button>
-        </form>
-      {% endif %}
-    </div>
-  </div>
-  <div class="row g-3 mb-4">
-    <div class="col-lg-8">
-      <div class="card shadow-sm h-100">
-        <div class="card-header fw-semibold">Child</div>
-        <div class="card-body">
-          <dl class="row mb-0">
-            <dt class="col-sm-3 text-muted fw-normal">Date of birth</dt>
-            <dd class="col-sm-9">
-              {{ referral.child.date_of_birth|date:"Y-m-d"|default:"—" }}
-            </dd>
-            <dt class="col-sm-3 text-muted fw-normal">Relationship</dt>
-            <dd class="col-sm-9">
-              {{ referral.child.get_relationship_display }}
-            </dd>
-            <dt class="col-sm-3 text-muted fw-normal">In school</dt>
-            <dd class="col-sm-9">
-              {{ referral.child.in_school|yesno:"Yes,No" }}
-            </dd>
-            <dt class="col-sm-3 text-muted fw-normal">Referral need</dt>
-            <dd class="col-sm-9">
-              {{ referral.child.get_referral_need_display }}
-            </dd>
-            <dt class="col-sm-3 text-muted fw-normal">Care schedule</dt>
-            <dd class="col-sm-9">
-              {% if care_schedule %}
-                <ul class="list-unstyled mb-0">
-                  {% for day, ranges in care_schedule %}
-                    <li>
-                      <span class="fw-semibold text-capitalize">{{ day }}:</span>
-                      {{ ranges|join:", " }}
-                    </li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                <span class="text-muted">No schedule provided.</span>
-              {% endif %}
-            </dd>
-          </dl>
+    <!-- title row -->
+    <div class="rd-titlebar">
+      <div class="rd-titlebar__main">
+        <div class="rd-headline">
+          <h1 class="rd-title">{{ referral.child }}</h1>
+          <span class="rd-status rd-status--{{ referral.status }}">
+            <span class="rd-status__dot"></span>{{ referral.get_status_display }}
+          </span>
+          {% if referral.help_requested %}
+            <span class="rd-flag"><i class="bi bi-exclamation-triangle-fill"></i>Needs help</span>
+          {% endif %}
+        </div>
+        <div class="rd-titlemeta">
+          <span><i class="bi bi-signpost-split"></i>{{ referral.get_source_display }}</span>
+          <span class="rd-titlemeta__sep">·</span>
+          <span>Referral #{{ referral.pk }}</span>
+          <span class="rd-titlemeta__sep">·</span>
+          <span>Opened {{ referral.created|date:"M j, Y" }}</span>
         </div>
       </div>
-    </div>
-    <div class="col-lg-4">
-      <div class="card shadow-sm h-100">
-        <div class="card-header fw-semibold">Family contact</div>
-        <div class="card-body">
-          <div class="fw-semibold">{{ referral.child.family.name|default:"—" }}</div>
-          <div class="small">
-            <i class="bi bi-envelope text-secondary me-1"></i>{{ referral.child.family.email }}
+      {% if referral.coordinator %}
+        <div class="rd-assignee">
+          <span class="rd-avatar">{{ referral.coordinator.name|default:referral.coordinator.email|initials }}</span>
+          <div>
+            <div class="rd-assignee__role">Coordinator</div>
+            <div class="rd-assignee__name">{{ referral.coordinator.name|default:referral.coordinator.email }}</div>
           </div>
-          {% if referral.child.family.phone %}
-            <div class="small">
-              <i class="bi bi-telephone text-secondary me-1"></i>{{ referral.child.family.phone }}
+        </div>
+      {% else %}
+        <div class="rd-assignbox">
+          <form method="post" action="{% url 'referrals:claim' referral.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="compass-btn compass-btn--primary rd-claim">
+              <i class="bi bi-hand-index-thumb"></i>Claim this referral
+            </button>
+          </form>
+          <span class="rd-assignbox__hint">Unassigned · waiting {{ referral.created|timesince }}</span>
+        </div>
+      {% endif %}
+    </div>
+    <!-- body: main + sidebar -->
+    <div class="rd-body">
+      <div class="rd-main">
+        <!-- child card -->
+        <div class="rd-card">
+          <div class="rd-card__head">
+            <div class="rd-card__titlewrap">
+              <span class="rd-card__icon"><i class="{{ child_age.icon }}"></i></span>
+              <span class="rd-card__title">Child</span>
             </div>
-          {% endif %}
-          <div class="mt-3">
-            {% if referral.child.family.has_usable_password %}
-              <span class="badge text-bg-success">Account active</span>
+            <span class="rd-pill">{{ child_age.band }}</span>
+          </div>
+          <div class="rd-facts">
+            <div class="rd-fact">
+              <div class="rd-fact__label">Date of birth</div>
+              <div class="rd-fact__value">{{ referral.child.date_of_birth|date:"M j, Y"|default:"—" }}</div>
+            </div>
+            <div class="rd-fact">
+              <div class="rd-fact__label">Age</div>
+              <div class="rd-fact__value">{{ child_age.detail|default:"—" }}</div>
+            </div>
+            <div class="rd-fact">
+              <div class="rd-fact__label">Relationship</div>
+              <div class="rd-fact__value">{{ referral.child.get_relationship_display }}</div>
+            </div>
+            <div class="rd-fact">
+              <div class="rd-fact__label">In school</div>
+              <div class="rd-fact__value">{{ referral.child.in_school|yesno:"Yes,No" }}</div>
+            </div>
+            <div class="rd-fact">
+              <div class="rd-fact__label">Referral need</div>
+              <div class="rd-fact__value">{{ referral.child.get_referral_need_display }}</div>
+            </div>
+            <div class="rd-fact">
+              <div class="rd-fact__label">Active provider</div>
+              <div class="rd-fact__value">{{ referral.child.active_provider|default:"None on file" }}</div>
+            </div>
+          </div>
+          <div class="rd-schedule">
+            <div class="rd-schedule__label">Care schedule</div>
+            {% if care_schedule %}
+              <div class="rd-chips">
+                {% for day, ranges in care_schedule %}
+                  <span class="rd-chip">
+                    <span class="rd-chip__day">{{ day }}</span>
+                    <span class="rd-chip__hours">{{ ranges|join:", " }}</span>
+                  </span>
+                {% endfor %}
+              </div>
             {% else %}
-              <form method="post"
-                    action="{% url 'referrals:invite_family' referral.pk %}">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-primary">Send account-claim email</button>
-              </form>
+              <span class="rd-muted">No schedule provided.</span>
             {% endif %}
           </div>
         </div>
-      </div>
-    </div>
-  </div>
-  <div class="card shadow-sm mb-4">
-    <div class="card-header fw-semibold">Schools</div>
-    <div class="card-body">
-      {% for school in referral.child.schools.all %}
-        <div class="mb-2">
-          <div class="fw-semibold">{{ school.institution_name|default:"School" }}</div>
-          <div class="text-muted small">
-            {% if school.grade_level %}Grade {{ school.grade_level }} · {% endif %}
-            {{ school.city }}
-            {% if school.city and school.state %}, {% endif %}
-            {{ school.state }}
-          </div>
-        </div>
-      {% empty %}
-        <span class="text-muted">No schools on record.</span>
-      {% endfor %}
-    </div>
-  </div>
-  <div class="card shadow-sm mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span class="fw-semibold">Status & notes</span>
-      <form method="post"
-            action="{% url 'referrals:set_status' referral.pk %}"
-            class="d-flex gap-2 mb-0">
-        {% csrf_token %}
-        <select name="status" class="form-select form-select-sm">
-          {% for value, label in status_choices %}
-            <option value="{{ value }}"
-                    {% if value == referral.status %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit" class="btn btn-sm btn-outline-secondary">Update</button>
-      </form>
-    </div>
-    <div class="card-body">
-      <form method="post" action="{% url 'referrals:edit_notes' referral.pk %}">
-        {% csrf_token %}
-        <textarea name="notes" rows="3" class="form-control mb-2">{{ referral.notes }}</textarea>
-        <button type="submit" class="btn btn-sm btn-outline-secondary">Save notes</button>
-      </form>
-    </div>
-  </div>
-  <div class="card shadow-sm mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span class="fw-semibold">Saved providers</span>
-      <a href="{% url 'referrals:provider_search' referral.pk %}"
-         class="btn btn-sm btn-outline-primary">Add providers</a>
-    </div>
-    <div class="card-body">
-      {% for saved in referral.saved_providers.all %}
-        <div class="border rounded p-3 mb-3">
-          <div class="d-flex justify-content-between align-items-start mb-2">
-            <h2 class="h6 mb-0">
-              <a href="{% url 'providers:detail' saved.provider.pk %}">{{ saved.provider }}</a>
-            </h2>
-            <form method="post" action="{% url 'referrals:provider_remove' saved.pk %}">
+        <!-- status & notes -->
+        <div class="rd-card">
+          <div class="rd-card__head">
+            <span class="rd-card__title">Status &amp; notes</span>
+            <form method="post"
+                  action="{% url 'referrals:set_status' referral.pk %}"
+                  class="rd-moveto">
               {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
-            </form>
-          </div>
-          <form method="post"
-                action="{% url 'referrals:provider_update' saved.pk %}"
-                class="row g-2 align-items-end">
-            {% csrf_token %}
-            <div class="col-sm-4">
-              <label for="status-{{ saved.pk }}" class="form-label mb-1 small">Status</label>
-              <select id="status-{{ saved.pk }}"
-                      name="status"
-                      class="form-select form-select-sm">
-                {% for value, label in provider_status_choices %}
-                  <option value="{{ value }}" {% if value == saved.status %}selected{% endif %}>{{ label }}</option>
+              <span class="rd-moveto__label">Move to</span>
+              <select name="status"
+                      class="compass-select compass-select--sm"
+                      aria-label="Move referral to status"
+                      onchange="this.form.submit()">
+                {% for value, label in status_choices %}
+                  <option value="{{ value }}"
+                          {% if value == referral.status %}selected{% endif %}>{{ label }}</option>
                 {% endfor %}
               </select>
-            </div>
-            <div class="col-sm-6">
-              <label for="notes-{{ saved.pk }}" class="form-label mb-1 small">Notes</label>
-              <input id="notes-{{ saved.pk }}"
-                     type="text"
-                     name="notes"
-                     value="{{ saved.notes }}"
-                     class="form-control form-control-sm" />
-            </div>
-            <div class="col-sm-2">
-              <button type="submit" class="btn btn-sm btn-outline-secondary w-100">Save</button>
-            </div>
-          </form>
+            </form>
+          </div>
+          <div class="rd-card__body">
+            <form method="post" action="{% url 'referrals:edit_notes' referral.pk %}">
+              {% csrf_token %}
+              <div class="rd-notelabel">
+                Coordinator notes <span class="rd-notelabel__sub">· internal, not shared with family</span>
+              </div>
+              <textarea name="notes"
+                        class="rd-textarea"
+                        data-rd-dirty="rd-note-hint"
+                        placeholder="Add context about this family's needs, conversations, next steps…">{{ referral.notes }}</textarea>
+              <div class="rd-saverow">
+                <span id="rd-note-hint"
+                      class="rd-savehint"
+                      data-dirty-text="Unsaved changes">All changes saved</span>
+                <button type="submit" class="compass-btn compass-btn--outline">Save notes</button>
+              </div>
+            </form>
+          </div>
         </div>
-      {% empty %}
-        <span class="text-muted">No providers saved yet.</span>
-      {% endfor %}
+        <!-- saved providers -->
+        {% with saved_list=referral.saved_providers.all %}
+          <div class="rd-card">
+            <div class="rd-card__head">
+              <div class="rd-card__titlewrap">
+                <span class="rd-card__title">Saved providers</span>
+                <span class="rd-card__count">{{ saved_list|length }} matched</span>
+              </div>
+              <a href="{% url 'referrals:provider_search' referral.pk %}"
+                 class="compass-btn compass-btn--outline">
+                <i class="bi bi-search"></i>Find &amp; add providers
+              </a>
+            </div>
+            <div class="rd-provlist">
+              {% for saved in saved_list %}
+                <div class="rd-prov">
+                  <div class="rd-prov__head">
+                    <span class="rd-prov__icon"><i class="bi bi-building"></i></span>
+                    <div class="rd-prov__main">
+                      <div class="rd-prov__titlerow">
+                        <a href="{% url 'providers:detail' saved.provider.pk %}"
+                           class="rd-prov__name">{{ saved.provider }}</a>
+                        <span class="rd-stage rd-stage--{{ saved.status }}">
+                          <span class="rd-stage__dot"></span>{{ saved.get_status_display }}
+                        </span>
+                      </div>
+                      {% if saved.provider.address %}
+                        <div class="rd-prov__meta">
+                          <i class="bi bi-geo-alt-fill"></i>{{ saved.provider.address|truncatechars:48 }}
+                        </div>
+                      {% endif %}
+                    </div>
+                    <form method="post" action="{% url 'referrals:provider_remove' saved.pk %}">
+                      {% csrf_token %}
+                      <button type="submit"
+                              class="rd-iconbtn"
+                              title="Remove provider"
+                              aria-label="Remove provider">
+                        <i class="bi bi-trash3"></i>
+                      </button>
+                    </form>
+                  </div>
+                  <!-- stage + note for family + save (paired into one update) -->
+                  <form method="post"
+                        action="{% url 'referrals:provider_update' saved.pk %}"
+                        class="rd-prov__form">
+                    {% csrf_token %}
+                    <div class="rd-field rd-field--stage">
+                      <label class="rd-field__label" for="stage-{{ saved.pk }}">Stage</label>
+                      <select id="stage-{{ saved.pk }}"
+                              name="status"
+                              class="compass-select compass-select--sm">
+                        {% for value, label in provider_status_choices %}
+                          <option value="{{ value }}" {% if value == saved.status %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="rd-field rd-field--note">
+                      <label class="rd-field__label" for="note-{{ saved.pk }}">Note for family</label>
+                      <input id="note-{{ saved.pk }}"
+                             type="text"
+                             name="notes"
+                             value="{{ saved.notes }}"
+                             class="rd-input"
+                             placeholder="Why this provider fits…" />
+                    </div>
+                    <button type="submit" class="compass-btn compass-btn--outline rd-prov__save">Save</button>
+                  </form>
+                </div>
+              {% empty %}
+                <div class="rd-empty">
+                  <i class="bi bi-bookmark-plus"></i>
+                  <div class="rd-empty__title">No providers saved yet</div>
+                  <div class="rd-empty__hint">Search and add child care options to share with this family.</div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endwith %}
+        <!-- messages -->
+        <div class="rd-card" id="messages">
+          <div class="rd-card__head">
+            <div class="rd-card__titlewrap">
+              <span class="rd-card__title">Messages with the family</span>
+              <span class="rd-card__count">{{ referral.child.family.name|default:referral.child.family.email }}</span>
+            </div>
+          </div>
+          <div class="rd-thread">
+            {% for message in thread %}
+              {% if message.sender_id == referral.child.family_id %}
+                <div class="rd-msg">
+                  <span class="rd-msg__avatar">{{ message.sender.name|default:message.sender.email|default:"Family"|initials }}</span>
+                  <div class="rd-msg__col">
+                    <div class="rd-msg__meta">
+                      <span class="rd-msg__author">{{ message.sender.name|default:message.sender.email|default:"Family" }}</span>
+                      <span class="rd-msg__time">{{ message.created|date:"M j, g:i A" }}</span>
+                    </div>
+                    <div class="rd-bubble">{{ message.body|linebreaksbr }}</div>
+                  </div>
+                </div>
+              {% else %}
+                <div class="rd-msg rd-msg--mine">
+                  <span class="rd-msg__avatar">{{ message.sender.name|default:message.sender.email|default:"Coordinator"|initials }}</span>
+                  <div class="rd-msg__col">
+                    <div class="rd-msg__meta">
+                      <span class="rd-msg__author">{{ message.sender.name|default:message.sender.email|default:"Coordinator" }}</span>
+                      <span class="rd-msg__time">{{ message.created|date:"M j, g:i A" }}</span>
+                    </div>
+                    <div class="rd-bubble">{{ message.body|linebreaksbr }}</div>
+                  </div>
+                </div>
+              {% endif %}
+            {% empty %}
+              <div class="rd-muted">No messages yet. Start the conversation below.</div>
+            {% endfor %}
+          </div>
+          <div class="rd-composer">
+            <form method="post" action="{% url 'referrals:message_post' referral.pk %}">
+              {% csrf_token %}
+              <textarea name="body" placeholder="Write a message to the family…"></textarea>
+              <div class="rd-composer__row">
+                <span class="rd-composer__hint"><i class="bi bi-shield-lock"></i>Family is notified by email</span>
+                <button type="submit" class="compass-btn compass-btn--primary">
+                  <i class="bi bi-send"></i>Send message
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      <!-- sidebar -->
+      <aside class="rd-sidebar">
+        <!-- family contact -->
+        <div class="rd-side">
+          <div class="rd-side__head">
+            <div class="rd-side__label">Family contact</div>
+            {% if referral.child.family.has_usable_password %}
+              <span class="rd-acct rd-acct--active"><i class="bi bi-check-circle-fill"></i>Account active</span>
+            {% else %}
+              <span class="rd-acct rd-acct--none"><i class="bi bi-dash-circle"></i>No account</span>
+            {% endif %}
+          </div>
+          <div class="rd-person">
+            <span class="rd-person__avatar">{{ referral.child.family.name|default:referral.child.family.email|initials }}</span>
+            <div>
+              <div class="rd-person__name">{{ referral.child.family.name|default:referral.child.family.email }}</div>
+              <div class="rd-person__rel">Parent / guardian</div>
+            </div>
+          </div>
+          <div class="rd-contacts">
+            <div class="rd-contact">
+              <i class="bi bi-envelope-fill"></i>
+              <a href="mailto:{{ referral.child.family.email }}">{{ referral.child.family.email }}</a>
+            </div>
+            {% if referral.child.family.phone %}
+              <div class="rd-contact">
+                <i class="bi bi-telephone-fill"></i>
+                <a href="tel:{{ referral.child.family.phone }}">{{ referral.child.family.phone }}</a>
+              </div>
+            {% endif %}
+          </div>
+          {% if referral.child.family.has_usable_password %}
+            <a href="#messages"
+               class="compass-btn compass-btn--outline rd-side__action">
+              <i class="bi bi-chat-left-text"></i>Message family
+            </a>
+          {% else %}
+            <form method="post"
+                  action="{% url 'referrals:invite_family' referral.pk %}">
+              {% csrf_token %}
+              <button type="submit"
+                      class="compass-btn compass-btn--outline rd-side__action">
+                <i class="bi bi-envelope-paper"></i>Send account-claim email
+              </button>
+            </form>
+          {% endif %}
+        </div>
+        <!-- schools -->
+        <div class="rd-side">
+          <div class="rd-side__head">
+            <div class="rd-side__label">Schools on record</div>
+          </div>
+          {% for school in referral.child.schools.all %}
+            <div class="rd-school">
+              <div class="rd-school__icon">
+                <i class="bi bi-backpack"></i>
+              </div>
+              <div>
+                <div class="rd-school__name">{{ school.institution_name|default:"School" }}</div>
+                <div class="rd-school__detail">
+                  {% if school.grade_level %}Grade {{ school.grade_level }} · {% endif %}
+                  {{ school.city }}
+                  {% if school.city and school.state %},{% endif %}
+                  {{ school.state }}
+                </div>
+              </div>
+            </div>
+          {% empty %}
+            <div class="rd-muted">
+              <i class="bi bi-dash-circle"></i> No schools on record.
+            </div>
+          {% endfor %}
+        </div>
+        <div class="rd-footer">
+          Referral #{{ referral.pk }} · created {{ referral.created|date:"M j, Y" }}
+          <br />
+          last updated {{ referral.modified|date:"M j, Y" }}
+        </div>
+      </aside>
     </div>
-  </div>
-  <div class="card shadow-sm mb-4" id="messages">
-    <div class="card-header fw-semibold">Messages with the family</div>
-    <div class="card-body">
-      {% include "referrals/_message_thread.html" %}
-      <form method="post"
-            action="{% url 'referrals:message_post' referral.pk %}"
-            class="mt-3">
-        {% csrf_token %}
-        {{ message_form.body }}
-        <button type="submit" class="btn btn-sm btn-primary mt-2">Send message</button>
-      </form>
-    </div>
-  </div>
-  <div class="text-muted small">
-    Referral #{{ referral.pk }} · created {{ referral.created|date:"Y-m-d" }} · updated
-    {{ referral.modified|date:"Y-m-d" }}
   </div>
 {% endblock content %}
