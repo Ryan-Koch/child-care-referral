@@ -19,30 +19,19 @@ from django.utils import timezone
 from django.views.generic import DetailView
 from django.views.generic import ListView
 
+from open_child_care_referral_platform.providers import detail
 from open_child_care_referral_platform.providers.models import Provider
+from open_child_care_referral_platform.providers.status import status_bucket
 from open_child_care_referral_platform.users.http import is_safe_next
 from open_child_care_referral_platform.users.roles import FAMILY_GROUP
 from open_child_care_referral_platform.users.roles import user_in_group
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from django.db.models import QuerySet
     from django.http import HttpRequest
     from django.http import HttpResponseBase
-
-# Columns shown in the detail page header / metadata footer (or rendered in their
-# own section), so they are excluded from the generic "Details" table.
-_NON_TABLE_FIELDS = frozenset(
-    {
-        "id",
-        "created",
-        "modified",
-        "state_data",
-        "provider_name",
-        "provider_type",
-        "status",
-        "source_state",
-    },
-)
 
 SOUTH_CAROLINA = "South Carolina"
 
@@ -122,6 +111,21 @@ def _delimited_token_regex(token: str) -> str:
     escaped because some carry regex metacharacters, e.g. "...(MCCYN)".
     """
     return rf"(^|;\s*){re.escape(token)}(\s*;|$)"
+
+
+# Valid WGS84 ranges; scraped coordinates outside them are treated as junk and
+# dropped rather than placed at (0, 0) or off the globe.
+_LAT_RANGE = (-90.0, 90.0)
+_LNG_RANGE = (-180.0, 180.0)
+
+
+def _parse_coord(value: str | None, low: float, high: float) -> float | None:
+    """Parse a raw-text coordinate to a float in ``[low, high]``, else ``None``."""
+    try:
+        coord = float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return coord if low <= coord <= high else None
 
 
 class ProviderListView(ListView):
@@ -410,7 +414,33 @@ class ProviderListView(ListView):
         context["selected_license_number"] = self.selected_license_number
         context["active_only"] = self.active_only
         context["search_query"] = self.search_query
+        # Markers for the Compass map pane: the current page's providers that
+        # carry usable coordinates. Serialised to JSON in the template.
+        context["map_points"] = self._map_points(context["providers"])
         return context
+
+    def _map_points(self, providers: Iterable[Provider]) -> list[dict[str, Any]]:
+        points: list[dict[str, Any]] = []
+        for provider in providers:
+            lat = _parse_coord(provider.latitude, *_LAT_RANGE)
+            lng = _parse_coord(provider.longitude, *_LNG_RANGE)
+            if lat is None or lng is None:
+                continue
+            # Some states store "0"/"0" as a placeholder for "no coordinate";
+            # drop that "null island" point rather than plotting off Africa.
+            if lat == 0 and lng == 0:
+                continue
+            points.append(
+                {
+                    "pk": provider.pk,
+                    "name": provider.provider_name or "Unnamed provider",
+                    "lat": lat,
+                    "lng": lng,
+                    "bucket": status_bucket(provider.status),
+                    "url": provider.get_absolute_url(),
+                },
+            )
+        return points
 
 
 # The one place the family redirect is enabled — this binding *is* the generic
@@ -425,14 +455,34 @@ class ProviderDetailView(DetailView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         provider = self.object
-        context["core_fields"] = [
-            (field.verbose_name, getattr(provider, field.name))
-            for field in provider._meta.concrete_fields  # noqa: SLF001
-            if field.name not in _NON_TABLE_FIELDS
-        ]
-        context["inspections"] = provider.inspections.all()
+        inspections = list(provider.inspections.all())
+        compliance = detail.compliance_summary(provider, inspections)
+        context["state_profile"] = detail.state_profile(provider)
+        context["quality"] = detail.quality_summary(provider)
+        context["compliance"] = compliance
+        context["show_compliance"] = compliance is not None
+        context["glance"] = detail.at_a_glance(provider)
+        context["age_groups"] = detail.age_groups(provider)
+        context["features"] = detail.program_features(provider)
+        context["program_facts"] = detail.program_facts(provider)
+        context["contacts"] = detail.contact_rows(provider)
+        context["license_rows"] = detail.license_rows(provider)
+        context["map_point"] = self._map_point(provider)
         context["back_url"] = self._safe_back_url()
         return context
+
+    def _map_point(self, provider: Provider) -> dict[str, Any] | None:
+        """Single Leaflet marker for the sidebar map, or ``None`` if uncoordinated."""
+        lat = _parse_coord(provider.latitude, *_LAT_RANGE)
+        lng = _parse_coord(provider.longitude, *_LNG_RANGE)
+        if lat is None or lng is None or (lat == 0 and lng == 0):
+            return None
+        return {
+            "lat": lat,
+            "lng": lng,
+            "name": provider.provider_name or "Unnamed provider",
+            "bucket": status_bucket(provider.status),
+        }
 
     def _safe_back_url(self) -> str:
         """A ``?next=`` URL to offer as a "back" link, only if same-site safe.

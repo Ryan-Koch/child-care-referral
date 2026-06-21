@@ -1,0 +1,663 @@
+/*
+ * Compass theme for the provider search surfaces.
+ *
+ * Ported from the "Provider Search" design (claude.ai/design). Every rule is
+ * scoped under `.compass` so it only affects the search pages that opt in and
+ * never leaks into the rest of the Bootstrap UI. The cream/teal palette, the
+ * Public Sans + Source Serif 4 type, and the card/pill/chip shapes come from the
+ * design; the data they render is the real Provider model.
+ */
+
+.compass {
+  --cmp-bg: #faf7f2;
+  --cmp-surface: #ffffff;
+  --cmp-surface-2: #fcfaf6;
+  --cmp-teal: #1f6e68;
+  --cmp-teal-deep: #22443f;
+  --cmp-accent: #cc6b4f;
+  --cmp-border: #e8e1d6;
+  --cmp-border-2: #ddd5c8;
+  --cmp-card-border: #ece5d9;
+  --cmp-text: #2c2723;
+  --cmp-text-muted: #7a7269;
+  --cmp-text-soft: #5a5249;
+  --cmp-text-faint: #9a9085;
+  --cmp-dot: #cfc6b6;
+
+  /* Inline SVG chevron used as the dropdown affordance on native selects. */
+  --cmp-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16' fill='none' stroke='%239a9085' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+
+  margin: 0 -12px; /* cancel the Bootstrap .container gutters (12px each side) */
+  padding: 20px 24px 28px;
+  background: var(--cmp-bg);
+  font-family: "Public Sans", system-ui, sans-serif;
+  color: var(--cmp-text);
+}
+
+.compass *,
+.compass *::before,
+.compass *::after {
+  box-sizing: border-box;
+}
+
+/* ---------- page header ---------- */
+.compass-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.compass-title {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 600;
+  font-size: 24px;
+  letter-spacing: -0.01em;
+  color: var(--cmp-teal-deep);
+  margin: 0;
+}
+
+.compass-subtitle {
+  font-size: 14px;
+  color: var(--cmp-text-muted);
+  margin-top: 4px;
+}
+
+.compass-breadcrumb {
+  font-size: 13px;
+  color: var(--cmp-text-muted);
+  margin-bottom: 10px;
+}
+
+.compass-breadcrumb a {
+  color: var(--cmp-teal);
+  text-decoration: none;
+}
+
+.compass-breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+/* ---------- toolbar (search + filters) ---------- */
+.compass-toolbar {
+  background: var(--cmp-surface);
+  border: 1px solid var(--cmp-border);
+  border-radius: 14px;
+  padding: 14px 16px 16px;
+  margin-bottom: 16px;
+}
+
+.compass-toolbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.compass-search {
+  position: relative;
+  flex: 1 1 280px;
+  max-width: 480px;
+}
+
+.compass-search .bi {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #a89e91;
+  font-size: 15px;
+  pointer-events: none;
+}
+
+.compass-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--cmp-border-2);
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14.5px;
+  color: var(--cmp-text);
+  background: var(--cmp-surface-2);
+  outline: none;
+}
+
+.compass-search .compass-input {
+  padding-left: 40px;
+}
+
+.compass-input:focus {
+  border-color: var(--cmp-teal);
+  background: var(--cmp-surface);
+  box-shadow: 0 0 0 3px rgba(31, 110, 104, 0.12);
+}
+
+.compass-input--license {
+  flex: 0 1 200px;
+  background: var(--cmp-surface-2);
+}
+
+/* Native select styled as a rounded pill with an SVG chevron. */
+.compass-select {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 42px;
+  padding: 0 34px 0 14px;
+  border: 1px solid var(--cmp-border-2);
+  border-radius: 10px;
+  background-color: var(--cmp-surface-2);
+  background-image: var(--cmp-chevron);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cmp-teal-deep);
+  cursor: pointer;
+  outline: none;
+}
+
+.compass-select:focus {
+  border-color: var(--cmp-teal);
+  box-shadow: 0 0 0 3px rgba(31, 110, 104, 0.12);
+}
+
+.compass-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.compass-select--sm {
+  height: 34px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #3a352f;
+}
+
+/* ---------- filter chip row ---------- */
+.compass-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+.compass-filters__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cmp-text-faint);
+}
+
+.compass-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--cmp-border);
+  margin: 0 2px;
+}
+
+.compass-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.compass-field__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cmp-text-faint);
+}
+
+/* Boolean filter rendered as a toggle chip (label wrapping a checkbox). */
+.compass-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--cmp-border-2);
+  border-radius: 8px;
+  background: var(--cmp-surface-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--cmp-text-soft);
+  cursor: pointer;
+  user-select: none;
+}
+
+.compass-toggle input {
+  accent-color: var(--cmp-teal);
+  margin: 0;
+}
+
+.compass-toggle:has(input:checked) {
+  border-color: var(--cmp-teal);
+  background: #e7f1ee;
+  color: #1b6e5f;
+}
+
+/* Multi-selects (program participation, public funding) below the chip row. */
+.compass-multirow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.compass-multiselect {
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--cmp-border-2);
+  border-radius: 10px;
+  background: var(--cmp-surface-2);
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--cmp-text);
+}
+
+.compass-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--cmp-text-faint);
+}
+
+/* ---------- results sub-header ---------- */
+.compass-resultsbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 2px 2px 13px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid #eee7dc;
+}
+
+.compass-resultsbar__count {
+  font-size: 14px;
+  color: var(--cmp-text-soft);
+}
+
+.compass-resultsbar__count b {
+  color: var(--cmp-text);
+  font-size: 15px;
+}
+
+/* ---------- workspace (results + map) ---------- */
+.compass-workspace {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.compass-results {
+  flex: 1 1 56%;
+  min-width: 0;
+}
+
+.compass-map {
+  flex: 1 1 44%;
+  position: sticky;
+  top: 16px;
+  height: calc(100vh - 120px);
+  min-height: 420px;
+  border: 1px solid var(--cmp-border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #ede7dd;
+}
+
+.compass-map__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--cmp-text-faint);
+  font-size: 13.5px;
+}
+
+.leaflet-container {
+  font-family: "Public Sans", sans-serif;
+  background: #ede7dd;
+}
+
+/* ---------- provider card ---------- */
+.compass-card {
+  position: relative;
+  background: var(--cmp-surface);
+  border: 1px solid var(--cmp-card-border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 2px rgba(56, 46, 32, 0.04);
+  transition: box-shadow 0.14s, border-color 0.14s, transform 0.14s;
+}
+
+.compass-card:hover,
+.compass-card.is-active {
+  border-color: #c9bfae;
+  box-shadow: 0 6px 20px rgba(56, 46, 32, 0.1);
+  transform: translateY(-1px);
+}
+
+.compass-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.compass-card__titlewrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.compass-card__title {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--cmp-teal-deep);
+  margin: 0;
+}
+
+.compass-card__title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.compass-card__title a:hover {
+  color: var(--cmp-teal);
+}
+
+.compass-card__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--cmp-text-muted);
+}
+
+.compass-card__sub .sep {
+  color: var(--cmp-dot);
+}
+
+/* ---------- status pill ---------- */
+.compass-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.compass-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+.compass-pill--active {
+  background: #e4f0ec;
+  color: #1b6e5f;
+}
+
+.compass-pill--warn {
+  background: #fbf0da;
+  color: #9a6b12;
+}
+
+.compass-pill--neutral {
+  background: #eeeae3;
+  color: #7a7269;
+}
+
+/* ---------- rating caption + age chips ---------- */
+.compass-rating {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: #8a8175;
+}
+
+.compass-rating i {
+  color: #e0a12e;
+  margin-right: 4px;
+}
+
+.compass-agechips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.compass-agechip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #cde5dd;
+  background: #e7f1ee;
+  color: #1b6e5f;
+}
+
+.compass-agechip--off {
+  border-color: #ece5d9;
+  background: var(--cmp-surface-2);
+  color: #bcb3a4;
+}
+
+/* ---------- card meta + actions ---------- */
+.compass-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  margin-top: 13px;
+  padding-top: 13px;
+  border-top: 1px solid #f0eadf;
+}
+
+.compass-card__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--cmp-text-soft);
+}
+
+.compass-card__meta-item .bi {
+  color: #a89e91;
+  font-size: 13px;
+}
+
+.compass-card__action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* "Add to referral" / family-save forms fill the rest of the action row. */
+.compass-card__action form {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* ---------- buttons ---------- */
+.compass-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.12s;
+}
+
+.compass-btn--primary {
+  background: var(--cmp-teal);
+  border-color: var(--cmp-teal);
+  color: #ffffff;
+}
+
+.compass-btn--primary:hover {
+  background: #1a5d58;
+  border-color: #1a5d58;
+  color: #ffffff;
+}
+
+.compass-btn--outline {
+  background: var(--cmp-surface);
+  border-color: #d7cec0;
+  color: #3a352f;
+}
+
+.compass-btn--outline:hover {
+  border-color: var(--cmp-teal);
+  color: var(--cmp-teal);
+}
+
+.compass-btn--added {
+  background: #e4f0ec;
+  border-color: #cde5dd;
+  color: #1b6e5f;
+  cursor: default;
+}
+
+.compass-btn--grow {
+  flex: 1 1 auto;
+}
+
+/* ---------- empty state ---------- */
+.compass-empty {
+  text-align: center;
+  padding: 56px 20px;
+  color: var(--cmp-text-faint);
+}
+
+.compass-empty .bi {
+  font-size: 30px;
+  opacity: 0.5;
+}
+
+.compass-empty__title {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 18px;
+  color: var(--cmp-text-soft);
+  margin-top: 12px;
+}
+
+.compass-empty__hint {
+  font-size: 13.5px;
+  margin-top: 4px;
+}
+
+/* ---------- pagination ---------- */
+.compass-pagenav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.compass-pagenav__status {
+  font-size: 13px;
+  color: var(--cmp-text-muted);
+}
+
+.compass-btn.is-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ---------- scoped overrides for reused Bootstrap controls ----------
+ * The family "save for a child" control (referrals/_family_save_control.html)
+ * is shared with the un-restyled provider detail page, so it keeps its Bootstrap
+ * classes. Re-skin them only inside .compass so they match here without touching
+ * that template or affecting the detail page.
+ */
+.compass .btn {
+  border-radius: 9px;
+  font-weight: 600;
+}
+
+.compass .btn-primary {
+  background-color: var(--cmp-teal);
+  border-color: var(--cmp-teal);
+}
+
+.compass .btn-primary:hover {
+  background-color: #1a5d58;
+  border-color: #1a5d58;
+}
+
+.compass .btn-outline-primary {
+  color: var(--cmp-teal);
+  border-color: var(--cmp-teal);
+}
+
+.compass .btn-outline-primary:hover {
+  background-color: var(--cmp-teal);
+  border-color: var(--cmp-teal);
+  color: #fff;
+}
+
+.compass .form-select {
+  border-radius: 9px;
+  border-color: var(--cmp-border-2);
+}
+
+.compass .alert-info {
+  background: #e7f1ee;
+  border-color: #cde5dd;
+  color: #1b5e57;
+}
+
+/* ---------- responsive: stack the map under the results ---------- */
+@media (max-width: 900px) {
+  .compass {
+    padding: 16px;
+  }
+
+  .compass-workspace {
+    flex-direction: column;
+  }
+
+  .compass-map {
+    position: relative;
+    top: 0;
+    width: 100%;
+    height: 360px;
+    min-height: 0;
+  }
+}

@@ -1,0 +1,156 @@
+/*
+ * Compass-styled global top bar.
+ *
+ * Loaded site-wide from base.html so the header matches the Compass provider
+ * search. Scoped under .compass-topbar; it re-skins the Bootstrap navbar
+ * (kept for its responsive collapse) without changing the rest of the page.
+ */
+.compass-topbar {
+  --cmp-teal: #1f6e68;
+  --cmp-teal-deep: #22443f;
+  --cmp-accent: #cc6b4f;
+  --cmp-bg: #faf7f2;
+  --cmp-border: #e8e1d6;
+  --cmp-muted: #7a7269;
+  --cmp-faint: #9a9085;
+
+  background: #ffffff;
+  border-bottom: 1px solid var(--cmp-border);
+  padding: 6px 24px;
+  min-height: 60px;
+  font-family: "Public Sans", system-ui, sans-serif;
+}
+
+.compass-topbar .container-fluid {
+  gap: 16px;
+}
+
+/* ---------- brand ---------- */
+.compass-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+}
+
+.compass-logo {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--cmp-teal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.compass-logo__dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--cmp-bg);
+  display: block;
+}
+
+.compass-brand__name {
+  font-family: "Source Serif 4", Georgia, serif;
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: var(--cmp-teal-deep);
+  white-space: nowrap;
+}
+
+.compass-rolebadge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cmp-faint);
+  background: #f1ece3;
+  padding: 3px 8px;
+  border-radius: 5px;
+}
+
+/* ---------- nav links ---------- */
+.compass-topbar .compass-navlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--cmp-muted);
+  padding: 8px 14px;
+  border-radius: 8px;
+  transition: background 0.12s, color 0.12s;
+}
+
+.compass-topbar .compass-navlink:hover,
+.compass-topbar .compass-navlink:focus {
+  background: #f1ece3;
+  color: var(--cmp-teal-deep);
+}
+
+.compass-topbar .compass-navlink.is-active {
+  color: var(--cmp-teal);
+  background: #e7f1ee;
+  font-weight: 600;
+}
+
+/* ---------- account / avatar ---------- */
+.compass-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--cmp-teal-deep);
+  color: #eaf3f0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.compass-avatar:hover {
+  color: #ffffff;
+  background: #1a5d58;
+}
+
+.compass-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--cmp-accent);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ---------- toggler ---------- */
+.compass-topbar .navbar-toggler {
+  border-color: var(--cmp-border);
+  padding: 4px 8px;
+}
+
+.compass-topbar .navbar-toggler:focus {
+  box-shadow: 0 0 0 3px rgba(31, 110, 104, 0.15);
+}
+
+/* When collapsed on small screens, give the stacked links a little room. */
+@media (max-width: 767.98px) {
+  .compass-topbar .navbar-nav {
+    gap: 2px;
+    padding-top: 8px;
+  }
+
+  .compass-topbar .navbar-nav.ms-auto {
+    padding-bottom: 4px;
+  }
+}

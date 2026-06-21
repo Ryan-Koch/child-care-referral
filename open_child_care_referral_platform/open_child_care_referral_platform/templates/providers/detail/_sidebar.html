@@ -1,0 +1,49 @@
+{% load referral_extras %}
+
+<aside class="cd-sidebar">
+  {% if is_family %}
+    <div class="cd-side-card">
+      <div class="cd-side-title">Referral</div>
+      {% family_save_control provider %}
+      <div class="cd-side-note">Save this provider to one of your children's referrals.</div>
+    </div>
+  {% endif %}
+  {% if provider.address or map_point or contacts %}
+    <div class="cd-side-card cd-side-card--flush">
+      {% if map_point %}
+        <div id="cd-map"
+             class="cd-map"
+             role="img"
+             aria-label="Map showing the provider location"></div>
+      {% endif %}
+      <div class="cd-side-body">
+        {% if provider.address %}
+          <div class="cd-address">{{ provider.address }}</div>
+        {% endif %}
+        {% if contacts %}
+          <div class="cd-contacts">
+            {% for contact in contacts %}
+              <div class="cd-contact">
+                <i class="bi {{ contact.icon }}"></i>
+                <a href="{{ contact.href }}">{{ contact.value }}</a>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+  {% if license_rows %}
+    <div class="cd-side-card">
+      <div class="cd-side-title">License snapshot</div>
+      <div class="cd-licrows">
+        {% for row in license_rows %}
+          <div class="cd-licrow">
+            <span class="cd-licrow__label">{{ row.label }}</span>
+            <span class="cd-licrow__value">{{ row.value }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+</aside>

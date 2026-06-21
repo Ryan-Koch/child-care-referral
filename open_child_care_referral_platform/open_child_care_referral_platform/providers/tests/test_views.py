@@ -74,17 +74,22 @@ def test_detail_ignores_offsite_next(client, provider):
 
 
 @pytest.mark.django_db
-def test_detail_renders_nested_state_data_and_inspections(client, provider):
+def test_detail_renders_state_data_and_inspections(client, provider):
     response = client.get(reverse("providers:detail", kwargs={"pk": provider.pk}))
 
     content = response.content.decode()
-    # Provider state_data keys/values (including nested rating history).
-    assert "sc_provider_id" in content
+    # state_data scalars surface in the Details tab under humanized labels, not
+    # raw keys (sc_provider_id -> "Provider ID").
+    assert "Provider ID" in content
     assert "4263" in content
-    assert "sc_abc_rating_history" in content
-    # Inspection and its own state_data are shown too.
+    assert "sc_provider_id" not in content
+    # The ABC grade drives the hero chip + Quality tab; its history is rendered
+    # as dated entries rather than the raw JSON key.
+    assert "A+" in content
+    assert "8/28/2024" in content
+    assert "sc_abc_rating_history" not in content
+    # Inspections appear in the Compliance tab.
     assert "Annual Review" in content
-    assert "sc_alert_count" in content
 
 
 @pytest.fixture
@@ -582,6 +587,50 @@ def test_va_funding_multiselect_requires_all(client, va_providers):
 
     names = [provider.provider_name for provider in response.context["providers"]]
     assert names == ["Meets Place"]
+
+
+# --- map points (Compass map pane) ----------------------------------------
+
+
+@pytest.mark.django_db
+def test_map_points_include_only_usable_coordinates(client):
+    mapped = Provider.objects.create(
+        provider_name="Mapped",
+        source_state="NY",
+        status="Licensed",
+        latitude="42.6074",
+        longitude="-73.8257",
+    )
+    Provider.objects.create(
+        provider_name="Null Island",
+        source_state="NY",
+        latitude="0",
+        longitude="0",
+    )
+    Provider.objects.create(
+        provider_name="Blank",
+        source_state="NY",
+        latitude="",
+        longitude="",
+    )
+    Provider.objects.create(
+        provider_name="Garbage",
+        source_state="NY",
+        latitude="n/a",
+        longitude="n/a",
+    )
+
+    points = client.get(reverse("providers:list"), {"state": "NY"}).context[
+        "map_points"
+    ]
+
+    assert [point["name"] for point in points] == ["Mapped"]
+    point = points[0]
+    assert point["pk"] == mapped.pk
+    assert point["lat"] == pytest.approx(42.6074)
+    assert point["lng"] == pytest.approx(-73.8257)
+    assert point["bucket"] == "active"
+    assert point["url"] == mapped.get_absolute_url()
 
 
 # --- generic search hidden from families (Task 14) -------------------------

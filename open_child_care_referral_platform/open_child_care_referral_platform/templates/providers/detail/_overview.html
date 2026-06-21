@@ -1,0 +1,48 @@
+{% if provider.state_data.ny_capacity_description %}
+  <div class="cd-section">
+    <h2 class="cd-heading">Program description</h2>
+    <p class="cd-prose">{{ provider.state_data.ny_capacity_description }}</p>
+  </div>
+{% endif %}
+{% if age_groups %}
+  <div class="cd-section">
+    <div class="cd-section__title">Ages served &amp; capacity</div>
+    <div class="cd-ages">
+      {% for age in age_groups %}
+        <div class="cd-age{% if age.served %} cd-age--served{% endif %}">
+          <div class="cd-age__icon">
+            <i class="bi {{ age.icon }}"></i>
+          </div>
+          <div>
+            <div class="cd-age__label">{{ age.label }}</div>
+            {% if age.served %}
+              <div class="cd-age__range">Capacity {{ age.capacity }}</div>
+            {% endif %}
+          </div>
+          <span class="cd-age__status">
+            {% if age.served %}
+              Serves this age
+            {% else %}
+              Not served
+            {% endif %}
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+{% if features %}
+  <div class="cd-section">
+    <div class="cd-section__title">Program features</div>
+    <div class="cd-chips">
+      {% for feature in features %}
+        <span class="cd-chip"><i class="bi {{ feature.icon }}"></i>{{ feature.label }}</span>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+{% if not provider.state_data.ny_capacity_description and not age_groups and not features %}
+  <p class="cd-prose">
+    Program details for this provider haven't been published yet. See the Details tab for the full record.
+  </p>
+{% endif %}

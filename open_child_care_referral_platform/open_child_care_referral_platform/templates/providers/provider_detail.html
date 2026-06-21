@@ -1,125 +1,82 @@
 {% extends "base.html" %}
 
-{% load referral_extras %}
+{% load static %}
+{% load provider_extras %}
 
 {% block title %}
   {{ provider.provider_name|default:"Provider" }}
 {% endblock title %}
+{% block css %}
+  {{ block.super }}
+  {# Compass fonts load globally from base.html. #}
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer" />
+  <link href="{% static 'css/compass_search.css' %}" rel="stylesheet" />
+  <link href="{% static 'css/compass_detail.css' %}" rel="stylesheet" />
+{% endblock css %}
+{% block javascript %}
+  {{ block.super }}
+  <script defer
+          src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"></script>
+  <script defer src="{% static 'js/compass_detail.js' %}"></script>
+{% endblock javascript %}
 {% block content %}
-  {% if back_url %}
-    <a href="{{ back_url }}" class="btn btn-sm btn-outline-secondary mb-3">
-      <i class="bi bi-arrow-left me-1"></i>Back to search
-    </a>
-  {% endif %}
-  <nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-      <li class="breadcrumb-item">
-        <a href="{% url 'providers:list' %}">Providers</a>
-      </li>
-      <li class="breadcrumb-item active" aria-current="page">{{ provider.provider_name|default:"Provider" }}</li>
-    </ol>
-  </nav>
-  <div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
-    <div>
-      <h1 class="h3 mb-1">{{ provider.provider_name|default:"Unnamed provider" }}</h1>
-      {% if provider.provider_type %}
-        <div class="text-muted">{{ provider.provider_type }}</div>
-      {% endif %}
-    </div>
-    <div class="text-end">
-      {% if provider.status %}
-        <span class="badge rounded-pill text-bg-secondary">{{ provider.status }}</span>
-      {% endif %}
-      {% if provider.source_state %}
-        <div class="text-muted small mt-1">
-          <i class="bi bi-flag me-1"></i>{{ provider.source_state }}
-        </div>
-      {% endif %}
-    </div>
-  </div>
-  {% if is_family %}
-    <div class="card shadow-sm mb-4">
-      <div class="card-body">
-        <h2 class="h6 mb-2">Save this provider</h2>
-        {% family_save_control provider %}
-      </div>
-    </div>
-  {% endif %}
-  {% if provider.provider_url %}
-    <p class="mb-4">
-      <i class="bi bi-link-45deg me-1"></i>
-      <a href="{{ provider.provider_url }}" target="_blank" rel="noopener">{{ provider.provider_url }}</a>
-    </p>
-  {% endif %}
-  <div class="card shadow-sm mb-4">
-    <div class="card-header fw-semibold">Details</div>
-    <div class="card-body">
-      <dl class="row mb-0">
-        {% for label, field_value in core_fields %}
-          <dt class="col-sm-3 text-muted fw-normal text-capitalize">{{ label }}</dt>
-          <dd class="col-sm-9">
-            {% include "providers/_data_value.html" with value=field_value %}
-          </dd>
-        {% endfor %}
-      </dl>
-    </div>
-  </div>
-  <div class="card shadow-sm mb-4">
-    <div class="card-header fw-semibold">State-specific data</div>
-    <div class="card-body">
-      {% if provider.state_data %}
-        {% include "providers/_data_value.html" with value=provider.state_data %}
-      {% else %}
-        <span class="text-muted">No additional state data.</span>
-      {% endif %}
-    </div>
-  </div>
-  <h2 class="h5 mb-3">
-    Inspections <span class="text-muted">({{ inspections|length }})</span>
-  </h2>
-  {% for inspection in inspections %}
-    <div class="card shadow-sm mb-3">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start">
-          <h3 class="h6 mb-2">{{ inspection.type|default:"Inspection" }}</h3>
-          <span class="text-muted small">{{ inspection.date }}</span>
-        </div>
-        <dl class="row mb-0 small">
-          {% if inspection.original_status %}
-            <dt class="col-sm-3 text-muted fw-normal">Original status</dt>
-            <dd class="col-sm-9">
-              {{ inspection.original_status }}
-            </dd>
-          {% endif %}
-          {% if inspection.corrective_status %}
-            <dt class="col-sm-3 text-muted fw-normal">Corrective status</dt>
-            <dd class="col-sm-9">
-              {{ inspection.corrective_status }}
-            </dd>
-          {% endif %}
-          {% if inspection.status_updated %}
-            <dt class="col-sm-3 text-muted fw-normal">Status updated</dt>
-            <dd class="col-sm-9">
-              {{ inspection.status_updated }}
-            </dd>
-          {% endif %}
-          {% if inspection.report_url %}
-            <dt class="col-sm-3 text-muted fw-normal">Report</dt>
-            <dd class="col-sm-9 text-break">
-              {{ inspection.report_url }}
-            </dd>
-          {% endif %}
-        </dl>
-        {% if inspection.state_data %}
-          <div class="mt-2">{% include "providers/_data_value.html" with value=inspection.state_data %}</div>
+  <div class="compass compass-detail">
+    {% if back_url %}
+      <a href="{{ back_url }}" class="cd-back"><i class="bi bi-arrow-left"></i>Back to search results</a>
+    {% endif %}
+    <nav class="compass-breadcrumb" aria-label="breadcrumb">
+      <a href="{% url 'providers:list' %}">Providers</a>
+      {% if provider.county %}› {{ provider.county }} County{% endif %}
+      › {{ provider.provider_name|default:"Provider" }}
+    </nav>
+    {% include "providers/detail/_hero.html" %}
+    <div class="cd-body">
+      <div class="cd-main">
+        {% if glance %}
+          <div class="cd-glance">
+            {% for stat in glance %}
+              <div class="cd-stat">
+                <div class="cd-stat__label">
+                  <i class="bi {{ stat.icon }}"></i>{{ stat.label }}
+                </div>
+                <div class="cd-stat__value">{{ stat.value }}</div>
+                {% if stat.sub %}<div class="cd-stat__sub">{{ stat.sub }}</div>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
         {% endif %}
+        <div class="cd-tabs" role="tablist">
+          <button class="cd-tab is-active" type="button" data-tab="overview">
+            <i class="bi bi-card-text"></i>Overview<span class="cd-tab__underline"></span>
+          </button>
+          {% if show_compliance %}
+            <button class="cd-tab" type="button" data-tab="compliance">
+              <i class="bi bi-clipboard2-check"></i>Compliance
+              <span class="cd-tab__badge">{{ compliance.rows|length }}</span>
+              <span class="cd-tab__underline"></span>
+            </button>
+          {% endif %}
+          <button class="cd-tab" type="button" data-tab="quality">
+            <i class="bi bi-star"></i>Quality rating<span class="cd-tab__underline"></span>
+          </button>
+          <button class="cd-tab" type="button" data-tab="details">
+            <i class="bi bi-list-ul"></i>Details<span class="cd-tab__underline"></span>
+          </button>
+        </div>
+        <div class="cd-panel" data-panel="overview">{% include "providers/detail/_overview.html" %}</div>
+        {% if show_compliance %}
+          <div class="cd-panel" data-panel="compliance" hidden>{% include "providers/detail/_compliance.html" %}</div>
+        {% endif %}
+        <div class="cd-panel" data-panel="quality" hidden>{% include "providers/detail/_quality.html" %}</div>
+        <div class="cd-panel" data-panel="details" hidden>{% include "providers/detail/_details.html" %}</div>
       </div>
+      {% include "providers/detail/_sidebar.html" %}
     </div>
-  {% empty %}
-    <p class="text-muted">No inspections on record.</p>
-  {% endfor %}
-  <div class="text-muted small mt-4">
-    Record #{{ provider.pk }} · created {{ provider.created }} · updated
-    {{ provider.modified }}
   </div>
+  {{ map_point|json_script:"cd-map-point" }}
 {% endblock content %}
