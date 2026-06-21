@@ -17,10 +17,13 @@ from urllib.parse import urlunsplit
 
 from django.conf import settings
 from django.contrib import messages
+from django.db.models import Case
 from django.db.models import Count
 from django.db.models import F
+from django.db.models import IntegerField
 from django.db.models import Prefetch
 from django.db.models import Q
+from django.db.models import When
 from django.http import Http404
 from django.http import JsonResponse
 from django.http import QueryDict
@@ -69,6 +72,12 @@ ACTIVE_STATUSES = (
     Referral.Status.ASSIGNED,
     Referral.Status.IN_PROGRESS,
 )
+
+# Queue sort options (the order the design's "Sort" control offers). "priority"
+# is the default: help-requested first, then longest-waiting (oldest).
+QUEUE_SORTS = ("priority", "oldest", "newest", "status")
+# Sentinel status filter meaning "every status" (vs. "" which means active-only).
+ALL_STATUSES = "all"
 
 # A care_schedule range is a [start, end] pair.
 _TIME_RANGE_PARTS = 2
@@ -137,6 +146,10 @@ class ReferralQueueView(CoordinatorRequiredMixin, ListView):
     paginate_by = 25
 
     @cached_property
+    def query(self) -> str:
+        return self.request.GET.get("q", "").strip()
+
+    @cached_property
     def selected_status(self) -> str:
         return self.request.GET.get("status", "")
 
@@ -148,29 +161,180 @@ class ReferralQueueView(CoordinatorRequiredMixin, ListView):
     def help_only(self) -> bool:
         return self.request.GET.get("help") == "1"
 
+    @cached_property
+    def unassigned_only(self) -> bool:
+        return self.request.GET.get("unassigned") == "1"
+
+    @cached_property
+    def sort(self) -> str:
+        value = self.request.GET.get("sort", "")
+        return value if value in QUEUE_SORTS else "priority"
+
     def get_queryset(self) -> QuerySet[Referral]:
         queryset = Referral.objects.select_related(
             "child",
             "child__family",
             "coordinator",
         ).annotate(unread_family_messages=_unread_family_messages())
+        if self.query:
+            queryset = queryset.filter(
+                Q(child__first_name__icontains=self.query)
+                | Q(child__last_name__icontains=self.query)
+                | Q(child__family__name__icontains=self.query)
+                | Q(child__family__email__icontains=self.query),
+            )
         if self.selected_status in Referral.Status.values:
             queryset = queryset.filter(status=self.selected_status)
-        else:
+        elif self.selected_status != ALL_STATUSES:
+            # "" (default) → active only; the "All" segment opts out with ALL_STATUSES.
             queryset = queryset.filter(status__in=ACTIVE_STATUSES)
         if self.mine:
             queryset = queryset.filter(coordinator=self.request.user.pk)
         if self.help_only:
             queryset = queryset.filter(help_requested=True)
-        # Oldest first: a work queue surfaces the longest-waiting referrals.
-        return queryset.order_by("created")
+        if self.unassigned_only:
+            queryset = queryset.filter(coordinator__isnull=True)
+        return self._ordered(queryset)
+
+    def _ordered(self, queryset: QuerySet[Referral]) -> QuerySet[Referral]:
+        if self.sort == "oldest":
+            return queryset.order_by("created")
+        if self.sort == "newest":
+            return queryset.order_by("-created")
+        if self.sort == "status":
+            rank = Case(
+                *(
+                    When(status=value, then=position)
+                    for position, value in enumerate(Referral.Status.values)
+                ),
+                default=len(Referral.Status.values),
+                output_field=IntegerField(),
+            )
+            return queryset.annotate(status_rank=rank).order_by(
+                "status_rank",
+                "created",
+            )
+        # "priority" (default): help-requested first, then longest-waiting (oldest).
+        return queryset.order_by("-help_requested", "created")
+
+    def _query_with(self, **overrides: str | None) -> str:
+        """The current querystring with ``overrides`` applied (a value of ``None``
+        drops that key). Resets pagination so a changed filter starts at page 1."""
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        for key, value in overrides.items():
+            if value is None:
+                params.pop(key, None)
+            else:
+                params[key] = value
+        encoded = params.urlencode()
+        return f"?{encoded}" if encoded else self.request.path
+
+    def _stat_tiles(self) -> list[dict[str, Any]]:
+        stats = Referral.objects.aggregate(
+            help=Count("pk", filter=Q(help_requested=True)),
+            active=Count("pk", filter=Q(status__in=ACTIVE_STATUSES)),
+            unassigned=Count(
+                "pk",
+                filter=Q(status__in=ACTIVE_STATUSES, coordinator__isnull=True),
+            ),
+            in_progress=Count("pk", filter=Q(status=Referral.Status.IN_PROGRESS)),
+        )
+        in_progress_active = self.selected_status == Referral.Status.IN_PROGRESS
+        return [
+            {
+                "label": "Need attention",
+                "value": stats["help"],
+                "icon": "bi bi-exclamation-triangle-fill",
+                "variant": "danger",
+                "active": self.help_only,
+                "url": self._query_with(
+                    help=None if self.help_only else "1",
+                    unassigned=None,
+                ),
+            },
+            {
+                "label": "Unassigned",
+                "value": stats["unassigned"],
+                "icon": "bi bi-person-dash",
+                "variant": "warn",
+                "active": self.unassigned_only,
+                "url": self._query_with(
+                    unassigned=None if self.unassigned_only else "1",
+                    help=None,
+                    status=None,
+                ),
+            },
+            {
+                "label": "In progress",
+                "value": stats["in_progress"],
+                "icon": "bi bi-arrow-repeat",
+                "variant": "teal",
+                "active": in_progress_active,
+                "url": self._query_with(
+                    status=None if in_progress_active else Referral.Status.IN_PROGRESS,
+                ),
+            },
+            {
+                "label": "Active total",
+                "value": stats["active"],
+                "icon": "bi bi-collection",
+                "variant": "neutral",
+                "active": False,
+                "url": self._query_with(status=None, help=None, unassigned=None),
+            },
+        ]
+
+    def _status_segments(self) -> list[dict[str, Any]]:
+        status = self.selected_status
+        return [
+            {
+                "label": "Active",
+                "url": self._query_with(status=None, unassigned=None),
+                "active": status in ("", "active"),
+            },
+            {
+                "label": "New",
+                "url": self._query_with(status=Referral.Status.NEW),
+                "active": status == Referral.Status.NEW,
+            },
+            {
+                "label": "In progress",
+                "url": self._query_with(status=Referral.Status.IN_PROGRESS),
+                "active": status == Referral.Status.IN_PROGRESS,
+            },
+            {
+                "label": "Matched",
+                "url": self._query_with(status=Referral.Status.COMPLETED),
+                "active": status == Referral.Status.COMPLETED,
+            },
+            {
+                "label": "All",
+                "url": self._query_with(status=ALL_STATUSES),
+                "active": status == ALL_STATUSES,
+            },
+        ]
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
-        context["status_choices"] = Referral.Status.choices
+        context["query"] = self.query
         context["selected_status"] = self.selected_status
         context["mine"] = self.mine
         context["help_only"] = self.help_only
+        context["unassigned_only"] = self.unassigned_only
+        context["sort"] = self.sort
+        context["tiles"] = self._stat_tiles()
+        context["status_segments"] = self._status_segments()
+        context["mine_url"] = self._query_with(mine=None if self.mine else "1")
+        context["total_count"] = Referral.objects.count()
+        context["has_filters"] = bool(
+            self.query
+            or self.selected_status not in ("", "active")
+            or self.mine
+            or self.help_only
+            or self.unassigned_only,
+        )
+        context["clear_url"] = self.request.path
         return context
 
 

@@ -124,6 +124,77 @@ def test_queue_shows_assignee(client) -> None:
     assert unassigned.coordinator is None
 
 
+@pytest.mark.django_db
+def test_queue_search_matches_child_and_family(client) -> None:
+    client.force_login(make_coordinator())
+    match = ReferralFactory.create(
+        status=Referral.Status.NEW,
+        child__first_name="Zaphod",
+    )
+    other = ReferralFactory.create(status=Referral.Status.NEW, child__first_name="Ford")
+
+    response = client.get(reverse("referrals:queue"), {"q": "zaphod"})
+    referrals = list(response.context["referrals"])
+
+    assert match in referrals
+    assert other not in referrals
+
+
+@pytest.mark.django_db
+def test_queue_unassigned_filter_excludes_assigned(client) -> None:
+    coordinator = make_coordinator()
+    client.force_login(coordinator)
+    unassigned = ReferralFactory.create(status=Referral.Status.NEW)
+    assigned = ReferralFactory.create(
+        status=Referral.Status.ASSIGNED,
+        coordinator=coordinator,
+    )
+
+    response = client.get(reverse("referrals:queue"), {"unassigned": "1"})
+    referrals = list(response.context["referrals"])
+
+    assert unassigned in referrals
+    assert assigned not in referrals
+
+
+@pytest.mark.django_db
+def test_queue_all_status_includes_closed(client) -> None:
+    client.force_login(make_coordinator())
+    active = ReferralFactory.create(status=Referral.Status.NEW)
+    closed = ReferralFactory.create(status=Referral.Status.CLOSED)
+
+    response = client.get(reverse("referrals:queue"), {"status": "all"})
+    referrals = list(response.context["referrals"])
+
+    assert active in referrals
+    assert closed in referrals
+
+
+@pytest.mark.django_db
+def test_queue_sort_newest_first(client) -> None:
+    client.force_login(make_coordinator())
+    older = ReferralFactory.create(status=Referral.Status.NEW)
+    newer = ReferralFactory.create(status=Referral.Status.NEW)
+
+    response = client.get(reverse("referrals:queue"), {"sort": "newest"})
+    referrals = list(response.context["referrals"])
+
+    assert referrals.index(newer) < referrals.index(older)
+
+
+@pytest.mark.django_db
+def test_queue_priority_sort_surfaces_help_first(client) -> None:
+    client.force_login(make_coordinator())
+    # Created first, but no help requested — priority sort should rank it second.
+    plain = ReferralFactory.create(status=Referral.Status.NEW)
+    needs_help = ReferralFactory.create(status=Referral.Status.NEW, help_requested=True)
+
+    response = client.get(reverse("referrals:queue"))
+    referrals = list(response.context["referrals"])
+
+    assert referrals.index(needs_help) < referrals.index(plain)
+
+
 # --- detail view + actions ------------------------------------------------
 
 
