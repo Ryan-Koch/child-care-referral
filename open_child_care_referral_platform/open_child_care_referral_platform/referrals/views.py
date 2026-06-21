@@ -104,6 +104,49 @@ def _format_care_schedule(schedule: dict[str, Any]) -> list[tuple[str, list[str]
     return rows
 
 
+# Age bands mirror the queue's ``referral_extras`` table (infant → school-age);
+# duplicated here as a small self-contained helper so the detail page's child
+# card can label age without reaching into the queue row view-model.
+_DETAIL_AGE_BANDS: tuple[tuple[int, str, str], ...] = (
+    (1, "Infant", "bi bi-emoji-smile"),
+    (3, "Toddler", "bi bi-emoji-laughing"),
+    (5, "Preschool", "bi bi-mortarboard"),
+)
+_DETAIL_SCHOOL_AGE = ("School-age", "bi bi-backpack")
+_MONTHS_PER_YEAR = 12
+
+
+def _child_age(child: Child) -> dict[str, str]:
+    """Band label, icon, and a human age string for the child card.
+
+    Returns a neutral "not on file" band and an empty ``detail`` when the date
+    of birth is unknown, so the template can fall back gracefully.
+    """
+    dob = child.date_of_birth
+    if dob is None:
+        return {
+            "band": "Age not on file",
+            "icon": "bi bi-question-circle",
+            "detail": "",
+        }
+    today = timezone.localdate()
+    months = (today.year - dob.year) * _MONTHS_PER_YEAR + (today.month - dob.month)
+    if today.day < dob.day:
+        months -= 1
+    months = max(months, 0)
+    years = months // _MONTHS_PER_YEAR
+    if years < 1:
+        detail = f"{months} month{'' if months == 1 else 's'} old"
+    else:
+        detail = f"{years} year{'' if years == 1 else 's'} old"
+    band, icon = _DETAIL_SCHOOL_AGE
+    for ceiling, label, band_icon in _DETAIL_AGE_BANDS:
+        if years < ceiling:
+            band, icon = label, band_icon
+            break
+    return {"band": band, "icon": icon, "detail": detail}
+
+
 # --- messaging (Task 10) --------------------------------------------------
 #
 # A message is "family-sent" when its sender is the referral's child's family;
@@ -431,6 +474,7 @@ class ReferralDetailView(CoordinatorRequiredMixin, DetailView):
         context = super().get_context_data(**kwargs)
         referral = self.object
         context["care_schedule"] = _format_care_schedule(referral.child.care_schedule)
+        context["child_age"] = _child_age(referral.child)
         context["status_choices"] = Referral.Status.choices
         context["provider_status_choices"] = ReferralProvider.Status.choices
         context["thread"] = referral.messages.all()

@@ -117,6 +117,16 @@ def _initials(name: str) -> str:
     return "".join(part[0] for part in parts[:2]).upper() or "?"
 
 
+@register.filter
+def initials(value: str) -> str:
+    """Up to two uppercase initials from a name (or email), for avatars.
+
+    Exposed for the referral detail page's assignee and family-contact avatars;
+    shares the queue's ``_initials`` so the two stay in sync.
+    """
+    return _initials(value or "")
+
+
 def _avatar_index(name: str) -> int:
     """Stable 0..N-1 palette slot for a name (same hash as the source design)."""
     total = 0
