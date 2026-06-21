@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import date
 from datetime import timedelta
 
 import pytest
+from django.utils import timezone
 
 from open_child_care_referral_platform.referrals.models import Referral
 from open_child_care_referral_platform.referrals.templatetags.referral_extras import (
@@ -17,7 +17,7 @@ _YEAR = 365
 
 @pytest.mark.django_db
 def test_queue_row_age_band_from_dob() -> None:
-    today = date.today()
+    today = timezone.localdate()
     infant = ReferralFactory.create(
         child__date_of_birth=today - timedelta(days=180),
     )
