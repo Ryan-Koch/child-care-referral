@@ -74,17 +74,22 @@ def test_detail_ignores_offsite_next(client, provider):
 
 
 @pytest.mark.django_db
-def test_detail_renders_nested_state_data_and_inspections(client, provider):
+def test_detail_renders_state_data_and_inspections(client, provider):
     response = client.get(reverse("providers:detail", kwargs={"pk": provider.pk}))
 
     content = response.content.decode()
-    # Provider state_data keys/values (including nested rating history).
-    assert "sc_provider_id" in content
+    # state_data scalars surface in the Details tab under humanized labels, not
+    # raw keys (sc_provider_id -> "Provider ID").
+    assert "Provider ID" in content
     assert "4263" in content
-    assert "sc_abc_rating_history" in content
-    # Inspection and its own state_data are shown too.
+    assert "sc_provider_id" not in content
+    # The ABC grade drives the hero chip + Quality tab; its history is rendered
+    # as dated entries rather than the raw JSON key.
+    assert "A+" in content
+    assert "8/28/2024" in content
+    assert "sc_abc_rating_history" not in content
+    # Inspections appear in the Compliance tab.
     assert "Annual Review" in content
-    assert "sc_alert_count" in content
 
 
 @pytest.fixture

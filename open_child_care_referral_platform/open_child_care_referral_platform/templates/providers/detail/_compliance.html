@@ -1,0 +1,86 @@
+<div class="cd-note">
+  <i class="bi bi-info-circle-fill"></i>
+  <div>
+    Inspection records follow {{ state_profile.name }}'s child care licensing system
+    ({{ state_profile.agency }}). Inspection categories and severity tiers are state-specific.
+  </div>
+</div>
+<div class="cd-glance">
+  {% for stat in compliance.stats %}
+    <div class="cd-cstat">
+      <div class="cd-cstat__label">{{ stat.label }}</div>
+      <div class="cd-cstat__value{% if stat.warn %} cd-cstat__value--warn{% endif %}">{{ stat.value }}</div>
+    </div>
+  {% endfor %}
+</div>
+<div class="cd-section">
+  <div class="cd-section__title">Inspection history</div>
+  {% for row in compliance.rows %}
+    {% if compliance.kind == "sc" %}
+      <div class="cd-insp">
+        <button class="cd-insp__head" type="button" data-toggle>
+          <span class="cd-insp__icon {% if row.clean %}cd-insp__icon--clean{% elif row.open_count %}cd-insp__icon--alert{% else %}cd-insp__icon--warn{% endif %}">
+            <i class="bi {% if row.clean %}bi-check-circle-fill{% elif row.open_count %}bi-exclamation-triangle-fill{% else %}bi-exclamation-circle-fill{% endif %}"></i>
+          </span>
+          <span class="cd-insp__main">
+            <span class="cd-insp__title">
+              <span class="cd-insp__type">{{ row.type }}</span>
+              {% if row.date %}<span class="cd-insp__date">{{ row.date }}</span>{% endif %}
+            </span>
+            <span class="cd-insp__summary{% if row.clean %} cd-insp__summary--clean{% elif row.open_count %} cd-insp__summary--warn{% endif %}">{{ row.summary }}</span>
+          </span>
+          {% if row.findings %}
+            <span class="cd-insp__aside">View findings<i class="bi bi-chevron-down cd-insp__chev"></i></span>
+          {% else %}
+            <span class="cd-insp__aside cd-flag--ok"><i class="bi bi-check-circle-fill"></i>Clean</span>
+          {% endif %}
+        </button>
+        {% if row.findings %}
+          <div class="cd-insp__body">
+            <div class="cd-insp__findings">
+              {% for finding in row.findings %}
+                <div class="cd-finding">
+                  <div class="cd-finding__tags">
+                    <span class="cd-tag">{{ finding.type }}</span>
+                    <span class="cd-sev cd-sev--{{ finding.severity_level }}">{{ finding.severity }}</span>
+                    <span class="cd-finding__status cd-finding__status--{% if finding.resolved %}resolved{% else %}open{% endif %}">
+                      <i class="bi {% if finding.resolved %}bi-check-circle-fill{% else %}bi-clock-history{% endif %}"></i>{{ finding.status_label }}
+                    </span>
+                  </div>
+                  {% if finding.resolved and finding.date_resolved %}
+                    <div class="cd-finding__note">
+                      <i class="bi bi-arrow-return-right"></i> Resolved {{ finding.date_resolved }}
+                    </div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="cd-insp">
+        <div class="cd-insp__head">
+          <span class="cd-insp__icon {% if row.violations %}cd-insp__icon--warn{% else %}cd-insp__icon--clean{% endif %}">
+            <i class="bi {% if row.violations %}bi-exclamation-circle-fill{% else %}bi-check-circle-fill{% endif %}"></i>
+          </span>
+          <span class="cd-insp__main">
+            <span class="cd-insp__title">
+              <span class="cd-insp__type">{{ row.type }}</span>
+              {% if row.date %}<span class="cd-insp__date">{{ row.date }}</span>{% endif %}
+            </span>
+            <span class="cd-insp__summary{% if row.violations %} cd-insp__summary--warn{% else %} cd-insp__summary--clean{% endif %}">
+              {{ row.summary }}
+              {% if row.complaint %} · complaint-related{% endif %}
+            </span>
+          </span>
+          {% if row.violations %}
+            <span class="cd-insp__aside cd-flag--warn"><i class="bi bi-flag-fill"></i>Violations</span>
+          {% else %}
+            <span class="cd-insp__aside cd-flag--ok"><i class="bi bi-check-circle-fill"></i>Clear</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% endfor %}
+</div>

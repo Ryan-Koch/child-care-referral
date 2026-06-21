@@ -19,6 +19,7 @@ from django.utils import timezone
 from django.views.generic import DetailView
 from django.views.generic import ListView
 
+from open_child_care_referral_platform.providers import detail
 from open_child_care_referral_platform.providers.models import Provider
 from open_child_care_referral_platform.providers.status import status_bucket
 from open_child_care_referral_platform.users.http import is_safe_next
@@ -31,21 +32,6 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest
     from django.http import HttpResponseBase
-
-# Columns shown in the detail page header / metadata footer (or rendered in their
-# own section), so they are excluded from the generic "Details" table.
-_NON_TABLE_FIELDS = frozenset(
-    {
-        "id",
-        "created",
-        "modified",
-        "state_data",
-        "provider_name",
-        "provider_type",
-        "status",
-        "source_state",
-    },
-)
 
 SOUTH_CAROLINA = "South Carolina"
 
@@ -469,14 +455,34 @@ class ProviderDetailView(DetailView):
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         context = super().get_context_data(**kwargs)
         provider = self.object
-        context["core_fields"] = [
-            (field.verbose_name, getattr(provider, field.name))
-            for field in provider._meta.concrete_fields  # noqa: SLF001
-            if field.name not in _NON_TABLE_FIELDS
-        ]
-        context["inspections"] = provider.inspections.all()
+        inspections = list(provider.inspections.all())
+        compliance = detail.compliance_summary(provider, inspections)
+        context["state_profile"] = detail.state_profile(provider)
+        context["quality"] = detail.quality_summary(provider)
+        context["compliance"] = compliance
+        context["show_compliance"] = compliance is not None
+        context["glance"] = detail.at_a_glance(provider)
+        context["age_groups"] = detail.age_groups(provider)
+        context["features"] = detail.program_features(provider)
+        context["program_facts"] = detail.program_facts(provider)
+        context["contacts"] = detail.contact_rows(provider)
+        context["license_rows"] = detail.license_rows(provider)
+        context["map_point"] = self._map_point(provider)
         context["back_url"] = self._safe_back_url()
         return context
+
+    def _map_point(self, provider: Provider) -> dict[str, Any] | None:
+        """Single Leaflet marker for the sidebar map, or ``None`` if uncoordinated."""
+        lat = _parse_coord(provider.latitude, *_LAT_RANGE)
+        lng = _parse_coord(provider.longitude, *_LNG_RANGE)
+        if lat is None or lng is None or (lat == 0 and lng == 0):
+            return None
+        return {
+            "lat": lat,
+            "lng": lng,
+            "name": provider.provider_name or "Unnamed provider",
+            "bucket": status_bucket(provider.status),
+        }
 
     def _safe_back_url(self) -> str:
         """A ``?next=`` URL to offer as a "back" link, only if same-site safe.

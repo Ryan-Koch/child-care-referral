@@ -1,0 +1,12 @@
+{% if program_facts %}
+  <div class="cd-facts">
+    {% for fact in program_facts %}
+      <div class="cd-fact">
+        <div class="cd-fact__label">{{ fact.label }}</div>
+        <div class="cd-fact__value">{{ fact.value }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="cd-prose">No additional details on record.</p>
+{% endif %}

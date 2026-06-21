@@ -1,0 +1,68 @@
+{% if quality.is_rated %}
+  <div class="cd-quality">
+    <div class="cd-quality__badge">
+      {% if quality.kind == "grade" %}
+        <div class="cd-quality__grade">{{ quality.rating }}</div>
+      {% else %}
+        <span class="cd-quality__tier">{{ quality.rating }}</span>
+      {% endif %}
+    </div>
+    <div class="cd-quality__divider"></div>
+    <div class="cd-quality__body">
+      <div class="cd-quality__system">{{ quality.system }}</div>
+      <div class="cd-quality__blurb">{{ quality.blurb }}</div>
+    </div>
+  </div>
+  {% if quality.domains %}
+    <div class="cd-section">
+      <div class="cd-section__title">
+        Rating domains
+        {% if quality.total_points %}· {{ quality.total_points }} total points{% endif %}
+      </div>
+      {% for domain in quality.domains %}
+        <div class="cd-domain">
+          <div class="cd-domain__head">
+            <span class="cd-domain__label">{{ domain.label }}</span>
+            <span class="cd-domain__score">{{ domain.points }} pts</span>
+          </div>
+          <div class="cd-bar">
+            <div class="cd-bar__fill" data-pct="{{ domain.pct }}"></div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% if quality.history %}
+    <div class="cd-section">
+      <div class="cd-section__title">Rating history</div>
+      <div class="cd-history">
+        {% for entry in quality.history %}
+          <div class="cd-history__item">
+            <span>{{ entry.date }}</span>
+            <span class="cd-history__rating">{{ entry.rating }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+{% elif quality %}
+  <div class="cd-empty">
+    <i class="bi bi-patch-question"></i>
+    <div class="cd-empty__title">Not yet rated under {{ quality.system }}</div>
+    <div class="cd-empty__hint">
+      {{ quality.blurb }}
+      {% if quality.status_label and quality.status_label != "Not yet rated" %}
+        Current status: {{ quality.status_label }}.
+      {% endif %}
+    </div>
+  </div>
+{% else %}
+  <div class="cd-empty">
+    <i class="bi bi-patch-question"></i>
+    <div class="cd-empty__title">No statewide quality rating in {{ state_profile.name }}</div>
+    <div class="cd-empty__hint">
+      {{ state_profile.name }} does not operate a statewide quality rating &amp; improvement system.
+      Use the inspection history and program details to assess quality.
+    </div>
+  </div>
+{% endif %}

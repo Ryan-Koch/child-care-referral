@@ -1,0 +1,75 @@
+{% load provider_extras %}
+
+<div class="cd-hero">
+  <div class="cd-hero__banner">
+    {% if state_profile.name %}
+      <span class="cd-hero__flag"><i class="bi bi-flag-fill"></i>{{ state_profile.name }}</span>
+    {% endif %}
+  </div>
+  <div class="cd-hero__body">
+    <div class="cd-hero__avatar">
+      <div class="cd-hero__avatar-inner">
+        <i class="bi bi-building"></i>
+      </div>
+    </div>
+    <div class="cd-hero__row">
+      <div class="cd-hero__identity">
+        <div class="cd-hero__tags">
+          {% if provider.status %}
+            <span class="compass-pill {{ provider.status|status_pill_class }}">
+              <span class="compass-pill__dot"></span>{{ provider.status }}
+            </span>
+          {% endif %}
+          {% if provider.license_number %}
+            <span class="cd-hero__license">License {{ provider.license_number }}</span>
+          {% endif %}
+        </div>
+        <h1 class="cd-hero__name">{{ provider.provider_name|default:"Unnamed provider" }}</h1>
+        <div class="cd-hero__meta">
+          {% if provider.provider_type %}<span>{{ provider.provider_type }}</span>{% endif %}
+          {% if provider.provider_type and provider.county %}<span class="sep">·</span>{% endif %}
+          {% if provider.county %}<span><i class="bi bi-geo-alt-fill"></i>{{ provider.county }} County</span>{% endif %}
+        </div>
+      </div>
+      {% if quality.is_rated %}
+        <div class="cd-qchip">
+          <div class="cd-qchip__value">
+            {% if quality.kind == "grade" %}
+              {{ quality.rating }}
+            {% else %}
+              <i class="bi bi-star-fill"></i>
+            {% endif %}
+          </div>
+          <div class="cd-qchip__label">
+            {{ quality.system }}
+            {% if quality.kind == "tier" %}· {{ quality.rating }}{% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+    <div class="cd-hero__actions">
+      {% if provider.phone %}
+        <a class="compass-btn compass-btn--outline"
+           href="tel:{{ provider.phone }}">
+          <i class="bi bi-telephone"></i>{{ provider.phone }}
+        </a>
+      {% endif %}
+      {% if provider.address %}
+        <a class="compass-btn compass-btn--outline"
+           href="https://www.google.com/maps/search/?api=1&query={{ provider.address|urlencode }}"
+           target="_blank"
+           rel="noopener">
+          <i class="bi bi-signpost-2"></i>Directions
+        </a>
+      {% endif %}
+      {% if provider.provider_url %}
+        <a class="compass-btn compass-btn--outline"
+           href="{{ provider.provider_url }}"
+           target="_blank"
+           rel="noopener">
+          <i class="bi bi-box-arrow-up-right"></i>State record
+        </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
