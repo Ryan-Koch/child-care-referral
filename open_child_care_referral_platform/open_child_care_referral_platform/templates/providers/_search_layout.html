@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% comment %}
+Shared "Compass" layout for the three provider-search surfaces (generic catalog,
+family search, coordinator referral search). Owns the page chrome — Compass
+toolbar, two-pane results+map workspace, and pagination — so the pages only
+override:
+  - search_header : title / breadcrumb / actions
+  - search_intro  : optional banner above the toolbar (e.g. family add-a-child)
+  - card_action   : the per-result action, rendered once per provider with the
+                    loop's ``provider`` in scope
+  - empty_state   : the no-results message
+
+All filter/result context comes from ProviderListView (and its subclasses); the
+state-conditional filters live in the included providers/_filter_form.html.
+{% endcomment %}
+{% load static %}
+{% load provider_extras %}
+
+{% block css %}
+  {{ block.super }}
+  {# Compass fonts load globally from base.html. #}
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer" />
+  <link href="{% static 'css/compass_search.css' %}" rel="stylesheet" />
+{% endblock css %}
+{% block javascript %}
+  {{ block.super }}
+  <script defer
+          src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"></script>
+  <script defer src="{% static 'js/compass_search.js' %}"></script>
+{% endblock javascript %}
+{% block content %}
+  <div class="compass">
+    {% block search_header %}
+    {% endblock search_header %}
+    {% block search_intro %}
+    {% endblock search_intro %}
+    {% include "providers/_filter_form.html" %}
+    <div class="compass-resultsbar">
+      <div class="compass-resultsbar__count">
+        <b>{{ paginator.count }}</b> provider{{ paginator.count|pluralize }}
+      </div>
+    </div>
+    <div class="compass-workspace">
+      <div class="compass-results">
+        {% for provider in providers %}
+          <article class="compass-card" data-provider-pk="{{ provider.pk }}">
+            <div class="compass-card__head">
+              <div class="compass-card__titlewrap">
+                <h2 class="compass-card__title">
+                  <a href="{% url 'providers:detail' provider.pk %}">{{ provider.provider_name|default:"Unnamed provider" }}</a>
+                </h2>
+                <div class="compass-card__sub">
+                  {% if provider.provider_type %}<span>{{ provider.provider_type }}</span>{% endif %}
+                  {% if provider.provider_type and provider.county %}<span class="sep">·</span>{% endif %}
+                  {% if provider.county %}<span>{{ provider.county }} County</span>{% endif %}
+                </div>
+              </div>
+              {% if provider.status %}
+                <span class="compass-pill {{ provider.status|status_pill_class }}">
+                  <span class="compass-pill__dot"></span>{{ provider.status }}
+                </span>
+              {% endif %}
+            </div>
+            {% with rating=provider|provider_rating %}
+              {% if rating %}
+                <div class="compass-rating">
+                  <i class="bi bi-star-fill"></i>{{ rating }}
+                </div>
+              {% endif %}
+            {% endwith %}
+            {% if provider.infant|positive or provider.toddler|positive or provider.preschool|positive or provider.school|positive %}
+              <div class="compass-agechips">
+                <span class="compass-agechip{% if not provider.infant|positive %} compass-agechip--off{% endif %}">
+                  <i class="bi bi-emoji-smile"></i>Infant
+                </span>
+                <span class="compass-agechip{% if not provider.toddler|positive %} compass-agechip--off{% endif %}">
+                  <i class="bi bi-emoji-laughing"></i>Toddler
+                </span>
+                <span class="compass-agechip{% if not provider.preschool|positive %} compass-agechip--off{% endif %}">
+                  <i class="bi bi-mortarboard"></i>Preschool
+                </span>
+                <span class="compass-agechip{% if not provider.school|positive %} compass-agechip--off{% endif %}">
+                  <i class="bi bi-backpack"></i>School-age
+                </span>
+              </div>
+            {% endif %}
+            {% if provider.capacity or provider.hours %}
+              <div class="compass-card__meta">
+                {% if provider.capacity %}
+                  <div class="compass-card__meta-item">
+                    <i class="bi bi-people-fill"></i>Capacity {{ provider.capacity }}
+                  </div>
+                {% endif %}
+                {% if provider.hours %}
+                  <div class="compass-card__meta-item">
+                    <i class="bi bi-clock"></i>{{ provider.hours }}
+                  </div>
+                {% endif %}
+              </div>
+            {% endif %}
+            <div class="compass-card__action">
+              {% block card_action %}
+                <a href="{% url 'providers:detail' provider.pk %}"
+                   class="compass-btn compass-btn--outline">View details</a>
+              {% endblock card_action %}
+            </div>
+          </article>
+        {% empty %}
+          {% block empty_state %}
+            <div class="compass-empty">
+              <i class="bi bi-search"></i>
+              <div class="compass-empty__title">No providers match these filters</div>
+              <div class="compass-empty__hint">Try widening your search or clearing a filter.</div>
+            </div>
+          {% endblock empty_state %}
+        {% endfor %}
+        {% if is_paginated %}
+          <nav class="compass-pagenav" aria-label="Provider pages">
+            {% if page_obj.has_previous %}
+              <a class="compass-btn compass-btn--outline"
+                 href="{% querystring page=page_obj.previous_page_number %}">Previous</a>
+            {% else %}
+              <span class="compass-btn compass-btn--outline is-disabled">Previous</span>
+            {% endif %}
+            <span class="compass-pagenav__status">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+              <a class="compass-btn compass-btn--outline"
+                 href="{% querystring page=page_obj.next_page_number %}">Next</a>
+            {% else %}
+              <span class="compass-btn compass-btn--outline is-disabled">Next</span>
+            {% endif %}
+          </nav>
+        {% endif %}
+      </div>
+      <div id="compass-map"
+           class="compass-map"
+           role="img"
+           aria-label="Map of providers in the current results"></div>
+    </div>
+  </div>
+  {{ map_points|json_script:"compass-map-points" }}
+{% endblock content %}

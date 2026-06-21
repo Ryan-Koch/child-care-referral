@@ -20,11 +20,14 @@ from django.views.generic import DetailView
 from django.views.generic import ListView
 
 from open_child_care_referral_platform.providers.models import Provider
+from open_child_care_referral_platform.providers.status import status_bucket
 from open_child_care_referral_platform.users.http import is_safe_next
 from open_child_care_referral_platform.users.roles import FAMILY_GROUP
 from open_child_care_referral_platform.users.roles import user_in_group
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from django.db.models import QuerySet
     from django.http import HttpRequest
     from django.http import HttpResponseBase
@@ -122,6 +125,21 @@ def _delimited_token_regex(token: str) -> str:
     escaped because some carry regex metacharacters, e.g. "...(MCCYN)".
     """
     return rf"(^|;\s*){re.escape(token)}(\s*;|$)"
+
+
+# Valid WGS84 ranges; scraped coordinates outside them are treated as junk and
+# dropped rather than placed at (0, 0) or off the globe.
+_LAT_RANGE = (-90.0, 90.0)
+_LNG_RANGE = (-180.0, 180.0)
+
+
+def _parse_coord(value: str | None, low: float, high: float) -> float | None:
+    """Parse a raw-text coordinate to a float in ``[low, high]``, else ``None``."""
+    try:
+        coord = float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return coord if low <= coord <= high else None
 
 
 class ProviderListView(ListView):
@@ -410,7 +428,33 @@ class ProviderListView(ListView):
         context["selected_license_number"] = self.selected_license_number
         context["active_only"] = self.active_only
         context["search_query"] = self.search_query
+        # Markers for the Compass map pane: the current page's providers that
+        # carry usable coordinates. Serialised to JSON in the template.
+        context["map_points"] = self._map_points(context["providers"])
         return context
+
+    def _map_points(self, providers: Iterable[Provider]) -> list[dict[str, Any]]:
+        points: list[dict[str, Any]] = []
+        for provider in providers:
+            lat = _parse_coord(provider.latitude, *_LAT_RANGE)
+            lng = _parse_coord(provider.longitude, *_LNG_RANGE)
+            if lat is None or lng is None:
+                continue
+            # Some states store "0"/"0" as a placeholder for "no coordinate";
+            # drop that "null island" point rather than plotting off Africa.
+            if lat == 0 and lng == 0:
+                continue
+            points.append(
+                {
+                    "pk": provider.pk,
+                    "name": provider.provider_name or "Unnamed provider",
+                    "lat": lat,
+                    "lng": lng,
+                    "bucket": status_bucket(provider.status),
+                    "url": provider.get_absolute_url(),
+                },
+            )
+        return points
 
 
 # The one place the family redirect is enabled — this binding *is* the generic

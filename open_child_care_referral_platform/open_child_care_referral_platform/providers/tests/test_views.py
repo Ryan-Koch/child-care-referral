@@ -584,6 +584,50 @@ def test_va_funding_multiselect_requires_all(client, va_providers):
     assert names == ["Meets Place"]
 
 
+# --- map points (Compass map pane) ----------------------------------------
+
+
+@pytest.mark.django_db
+def test_map_points_include_only_usable_coordinates(client):
+    mapped = Provider.objects.create(
+        provider_name="Mapped",
+        source_state="NY",
+        status="Licensed",
+        latitude="42.6074",
+        longitude="-73.8257",
+    )
+    Provider.objects.create(
+        provider_name="Null Island",
+        source_state="NY",
+        latitude="0",
+        longitude="0",
+    )
+    Provider.objects.create(
+        provider_name="Blank",
+        source_state="NY",
+        latitude="",
+        longitude="",
+    )
+    Provider.objects.create(
+        provider_name="Garbage",
+        source_state="NY",
+        latitude="n/a",
+        longitude="n/a",
+    )
+
+    points = client.get(reverse("providers:list"), {"state": "NY"}).context[
+        "map_points"
+    ]
+
+    assert [point["name"] for point in points] == ["Mapped"]
+    point = points[0]
+    assert point["pk"] == mapped.pk
+    assert point["lat"] == pytest.approx(42.6074)
+    assert point["lng"] == pytest.approx(-73.8257)
+    assert point["bucket"] == "active"
+    assert point["url"] == mapped.get_absolute_url()
+
+
 # --- generic search hidden from families (Task 14) -------------------------
 
 

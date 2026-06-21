@@ -27,8 +27,14 @@
             href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css"
             crossorigin="anonymous"
             referrerpolicy="no-referrer" />
+      <!-- Compass fonts (used by the top bar and provider search) -->
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+      <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap"
+            rel="stylesheet" />
       <!-- This file stores project-specific CSS -->
       <link href="{% static 'css/project.css' %}" rel="stylesheet" />
+      <link href="{% static 'css/compass_header.css' %}" rel="stylesheet" />
     {% endblock css %}
     <!-- Le javascript
     ================================================== -->
@@ -48,9 +54,18 @@
   <body class="{% block bodyclass %}{% endblock bodyclass %}">
     {% block body %}
       <div class="mb-1">
-        <nav class="navbar navbar-expand-md navbar-light bg-light">
+        <nav class="navbar navbar-expand-md navbar-light compass-topbar">
           <div class="container-fluid">
-            <button class="navbar-toggler navbar-toggler-right"
+            <a class="navbar-brand compass-brand" href="{% url 'home' %}">
+              <span class="compass-logo"><span class="compass-logo__dot"></span></span>
+              <span class="compass-brand__name">Open Child Care Referral</span>
+              {% if is_coordinator %}
+                <span class="compass-rolebadge">Coordinator</span>
+              {% elif is_family %}
+                <span class="compass-rolebadge">Family</span>
+              {% endif %}
+            </a>
+            <button class="navbar-toggler"
                     type="button"
                     data-bs-toggle="collapse"
                     data-bs-target="#navbarSupportedContent"
@@ -59,55 +74,76 @@
                     aria-label="Toggle navigation">
               <span class="navbar-toggler-icon"></span>
             </button>
-            <a class="navbar-brand" href="{% url 'home' %}">Open Child Care Referral Platform</a>
             <div class="collapse navbar-collapse" id="navbarSupportedContent">
-              <ul class="navbar-nav mr-auto">
-                <li class="nav-item active">
-                  <a class="nav-link" href="{% url 'home' %}">Home <span class="visually-hidden">(current)</span></a>
-                </li>
+              <ul class="navbar-nav me-auto mb-2 mb-md-0">
+                {% url 'home' as url_home %}
                 <li class="nav-item">
-                  <a class="nav-link" href="{% url 'about' %}">About</a>
+                  <a class="nav-link compass-navlink {% if request.path == url_home %}is-active{% endif %}"
+                     href="{{ url_home }}">Home</a>
+                </li>
+                {% url 'about' as url_about %}
+                <li class="nav-item">
+                  <a class="nav-link compass-navlink {% if request.path == url_about %}is-active{% endif %}"
+                     href="{{ url_about }}">About</a>
                 </li>
                 {% if not is_family %}
+                  {% url 'providers:list' as url_providers %}
                   <li class="nav-item">
-                    <a class="nav-link" href="{% url 'providers:list' %}">Providers</a>
+                    <a class="nav-link compass-navlink {% if request.path == url_providers %}is-active{% endif %}"
+                       href="{{ url_providers }}">Providers</a>
                   </li>
                 {% endif %}
                 {% if is_coordinator %}
+                  {% url 'referrals:queue' as url_queue %}
                   <li class="nav-item">
-                    <a class="nav-link" href="{% url 'referrals:queue' %}">Referral queue</a>
+                    <a class="nav-link compass-navlink {% if request.path == url_queue %}is-active{% endif %}"
+                       href="{{ url_queue }}">Referral queue</a>
                   </li>
                 {% endif %}
                 {% if is_family %}
+                  {% url 'referrals:family_search' as url_family_search %}
                   <li class="nav-item">
-                    <a class="nav-link" href="{% url 'referrals:family_search' %}">Find providers</a>
+                    <a class="nav-link compass-navlink {% if request.path == url_family_search %}is-active{% endif %}"
+                       href="{{ url_family_search }}">Find providers</a>
                   </li>
+                  {% url 'referrals:my_referrals' as url_my_referrals %}
                   <li class="nav-item">
-                    <a class="nav-link" href="{% url 'referrals:my_referrals' %}">My providers
+                    <a class="nav-link compass-navlink {% if request.path == url_my_referrals %}is-active{% endif %}"
+                       href="{{ url_my_referrals }}">
+                      My providers
                       {% if unread_message_count %}
-                        <span class="badge text-bg-danger">{{ unread_message_count }}</span>
+                        <span class="compass-badge">{{ unread_message_count }}</span>
                       {% endif %}
                     </a>
                   </li>
                 {% endif %}
+              </ul>
+              <ul class="navbar-nav ms-auto align-items-md-center">
                 {% if request.user.is_authenticated %}
                   <li class="nav-item">
-                    <a class="nav-link" href="{% url 'users:detail' request.user.pk %}">{% translate "My Profile" %}</a>
+                    <a class="compass-avatar"
+                       href="{% url 'users:detail' request.user.pk %}"
+                       title="{% translate 'My Profile' %}"
+                       aria-label="{% translate 'My Profile' %}">{{ request.user.name|default:request.user.email|first|upper }}</a>
                   </li>
                   <li class="nav-item">
                     {# URL provided by django-allauth/account/urls.py #}
-                    <a class="nav-link" href="{% url 'account_logout' %}">{% translate "Sign Out" %}</a>
+                    <a class="nav-link compass-navlink" href="{% url 'account_logout' %}">{% translate "Sign Out" %}</a>
                   </li>
                 {% else %}
                   {% if ACCOUNT_ALLOW_REGISTRATION %}
                     <li class="nav-item">
                       {# URL provided by django-allauth/account/urls.py #}
-                      <a id="sign-up-link" class="nav-link" href="{% url 'account_signup' %}">{% translate "Sign Up" %}</a>
+                      <a id="sign-up-link"
+                         class="nav-link compass-navlink"
+                         href="{% url 'account_signup' %}">{% translate "Sign Up" %}</a>
                     </li>
                   {% endif %}
                   <li class="nav-item">
                     {# URL provided by django-allauth/account/urls.py #}
-                    <a id="log-in-link" class="nav-link" href="{% url 'account_login' %}">{% translate "Sign In" %}</a>
+                    <a id="log-in-link"
+                       class="nav-link compass-navlink"
+                       href="{% url 'account_login' %}">{% translate "Sign In" %}</a>
                   </li>
                 {% endif %}
               </ul>
