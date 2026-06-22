@@ -10,10 +10,8 @@
  * data they render is the real Child / Referral / ReferralProvider models.
  */
 
-/* The full page goes cream when a family template sets body.fp-body. */
-body.fp-body {
-  background: #faf7f2;
-}
+/* The cream page background is set site-wide in compass_header.css (the .fp
+ * surface below just continues it edge-to-edge inside the Bootstrap container). */
 
 .fp {
   --cmp-bg: #faf7f2;

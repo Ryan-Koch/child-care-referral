@@ -9,7 +9,6 @@
     Add a child
   {% endif %}
 {% endblock title %}
-{% block bodyclass %}fp-body{% endblock bodyclass %}
 {% block css %}
   {{ block.super }}
   <link href="{% static 'css/compass_family.css' %}" rel="stylesheet" />
@@ -220,7 +219,8 @@
               <i class="bi bi-plus-lg"></i>Add child &amp; find providers
             {% endif %}
           </button>
-          <a href="{% url 'referrals:my_referrals' %}" class="fp-btn fp-btn--ghost">Cancel</a>
+          <a href="{% url 'referrals:my_referrals' %}"
+             class="fp-btn fp-btn--ghost">Cancel</a>
         </div>
       </form>
     </div>
