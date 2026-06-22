@@ -21,6 +21,20 @@ from open_child_care_referral_platform.users.tests.factories import make_coordin
 from open_child_care_referral_platform.users.tests.factories import make_family
 
 
+def _schools_management(*, total: int = 0, initial: int = 0) -> dict[str, str]:
+    """Minimal Schools inline-formset management form (prefix ``schools``).
+
+    The child form now embeds a Schools formset, so any add/edit POST must carry
+    its management form for the formset to validate.
+    """
+    return {
+        "schools-TOTAL_FORMS": str(total),
+        "schools-INITIAL_FORMS": str(initial),
+        "schools-MIN_NUM_FORMS": "0",
+        "schools-MAX_NUM_FORMS": "1000",
+    }
+
+
 @pytest.mark.django_db
 def test_queue_redirects_anonymous_to_login(client) -> None:
     response = client.get(reverse("referrals:queue"))
@@ -507,6 +521,8 @@ def test_add_child_creates_child_referral_and_redirects_to_search(client) -> Non
             "last_name": "Lovelace",
             "date_of_birth": "2018-12-10",
             "relationship": Child.Relationship.CHILD,
+            "referral_need": Child.ReferralNeed.NEED_ASSISTANCE,
+            **_schools_management(),
         },
     )
 
@@ -530,7 +546,9 @@ def test_add_child_ignores_posted_family(client) -> None:
         {
             "first_name": "Grace",
             "relationship": Child.Relationship.CHILD,
+            "referral_need": Child.ReferralNeed.NEED_ASSISTANCE,
             "family": other.pk,  # must be ignored — child belongs to the poster
+            **_schools_management(),
         },
     )
 
@@ -1174,3 +1192,215 @@ def test_nav_unread_badge_counts_only_coordinator_messages(client) -> None:
     response = client.get(reverse("referrals:my_referrals"))
 
     assert response.context["unread_message_count"] == 1
+
+
+# --- family: respond to a saved provider (Goal #2) ------------------------
+
+
+def _shared_provider(referral, status=None):
+    return ReferralProviderFactory.create(
+        referral=referral,
+        status=status or ReferralProvider.Status.SHARED,
+    )
+
+
+@pytest.mark.django_db
+def test_provider_respond_interested_marks_selected(client) -> None:
+    referral, fam = _family_referral()
+    saved = _shared_provider(referral)
+    client.force_login(fam)
+
+    response = client.post(
+        reverse("referrals:provider_respond", kwargs={"pk": saved.pk}),
+        {"response": "interested"},
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url == reverse("referrals:my_referrals")
+    saved.refresh_from_db()
+    assert saved.status == ReferralProvider.Status.SELECTED
+
+
+@pytest.mark.django_db
+def test_provider_respond_pass_marks_declined(client) -> None:
+    referral, fam = _family_referral()
+    saved = _shared_provider(referral)
+    client.force_login(fam)
+
+    client.post(
+        reverse("referrals:provider_respond", kwargs={"pk": saved.pk}),
+        {"response": "pass"},
+    )
+
+    saved.refresh_from_db()
+    assert saved.status == ReferralProvider.Status.DECLINED
+
+
+@pytest.mark.django_db
+def test_provider_respond_invalid_value_leaves_status(client) -> None:
+    referral, fam = _family_referral()
+    saved = _shared_provider(referral)
+    client.force_login(fam)
+
+    response = client.post(
+        reverse("referrals:provider_respond", kwargs={"pk": saved.pk}),
+        {"response": "maybe"},
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    saved.refresh_from_db()
+    assert saved.status == ReferralProvider.Status.SHARED
+
+
+@pytest.mark.django_db
+def test_provider_respond_404_for_other_familys_provider(client) -> None:
+    other_referral, _ = _family_referral()
+    saved = _shared_provider(other_referral)
+    client.force_login(make_family())
+
+    response = client.post(
+        reverse("referrals:provider_respond", kwargs={"pk": saved.pk}),
+        {"response": "interested"},
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    saved.refresh_from_db()
+    assert saved.status == ReferralProvider.Status.SHARED
+
+
+@pytest.mark.django_db
+def test_provider_respond_rejects_coordinator(client) -> None:
+    referral, _ = _family_referral()
+    saved = _shared_provider(referral)
+    client.force_login(make_coordinator())
+
+    response = client.post(
+        reverse("referrals:provider_respond", kwargs={"pk": saved.pk}),
+        {"response": "interested"},
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_provider_respond_requires_post(client) -> None:
+    referral, fam = _family_referral()
+    saved = _shared_provider(referral)
+    client.force_login(fam)
+
+    response = client.get(
+        reverse("referrals:provider_respond", kwargs={"pk": saved.pk}),
+    )
+
+    assert response.status_code == HTTPStatus.METHOD_NOT_ALLOWED
+
+
+@pytest.mark.django_db
+def test_my_referrals_shows_respond_buttons_for_shared_only(client) -> None:
+    referral, fam = _family_referral()  # ReferralFactory defaults to NEW (active)
+    shared = _shared_provider(referral)
+    selected = _shared_provider(referral, status=ReferralProvider.Status.SELECTED)
+    client.force_login(fam)
+
+    content = client.get(reverse("referrals:my_referrals")).content.decode()
+
+    assert reverse("referrals:provider_respond", kwargs={"pk": shared.pk}) in content
+    assert (
+        reverse("referrals:provider_respond", kwargs={"pk": selected.pk}) not in content
+    )
+
+
+# --- family: full child add/edit form (care schedule + schools) -----------
+
+
+@pytest.mark.django_db
+def test_add_child_saves_care_schedule_and_school(client) -> None:
+    fam = make_family()
+    client.force_login(fam)
+
+    response = client.post(
+        reverse("referrals:family_add_child"),
+        {
+            "first_name": "Sofia",
+            "relationship": Child.Relationship.CHILD,
+            "referral_need": Child.ReferralNeed.NEED_ASSISTANCE,
+            "sched_monday": "on",
+            "sched_monday_from": "07:30",
+            "sched_monday_to": "17:30",
+            "schools-0-institution_name": "Lincoln Elementary",
+            "schools-0-city": "Columbus",
+            "schools-0-state": "OH",
+            "schools-0-grade_level": "K",
+            **_schools_management(total=1),
+        },
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    child = Child.objects.get(family=fam, first_name="Sofia")
+    assert child.care_schedule == {"monday": [["07:30", "17:30"]]}
+    assert child.schools.filter(institution_name="Lincoln Elementary").exists()
+
+
+@pytest.mark.django_db
+def test_edit_child_renders_for_owner(client) -> None:
+    referral, fam = _family_referral()
+    client.force_login(fam)
+
+    response = client.get(
+        reverse("referrals:family_edit_child", kwargs={"pk": referral.child.pk}),
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.context["is_edit"] is True
+
+
+@pytest.mark.django_db
+def test_edit_child_updates_identity_and_schedule(client) -> None:
+    referral, fam = _family_referral()
+    child = referral.child
+    client.force_login(fam)
+
+    response = client.post(
+        reverse("referrals:family_edit_child", kwargs={"pk": child.pk}),
+        {
+            "first_name": "Renamed",
+            "last_name": child.last_name,
+            "relationship": Child.Relationship.CHILD,
+            "referral_need": Child.ReferralNeed.SELF_SERVICE,
+            "sched_tuesday": "on",
+            "sched_tuesday_from": "08:00",
+            "sched_tuesday_to": "15:00",
+            **_schools_management(),
+        },
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    assert response.url == reverse("referrals:my_referrals")
+    child.refresh_from_db()
+    assert child.first_name == "Renamed"
+    assert child.referral_need == Child.ReferralNeed.SELF_SERVICE
+    assert child.care_schedule == {"tuesday": [["08:00", "15:00"]]}
+
+
+@pytest.mark.django_db
+def test_edit_child_404_for_other_family(client) -> None:
+    other_child = ChildFactory.create(family=make_family())
+    client.force_login(make_family())
+
+    response = client.get(
+        reverse("referrals:family_edit_child", kwargs={"pk": other_child.pk}),
+    )
+
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.django_db
+def test_edit_child_forbids_coordinator(client) -> None:
+    child = ChildFactory.create(family=make_family())
+    client.force_login(make_coordinator())
+
+    response = client.get(
+        reverse("referrals:family_edit_child", kwargs={"pk": child.pk}),
+    )
+
+    assert response.status_code == HTTPStatus.FORBIDDEN

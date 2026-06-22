@@ -7,6 +7,7 @@ from django import template
 from django.utils import timezone
 
 from open_child_care_referral_platform.referrals.models import Referral
+from open_child_care_referral_platform.referrals.models import ReferralProvider
 from open_child_care_referral_platform.referrals.selectors import (
     default_selected_child_id,
 )
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from django.template.context import Context
 
     from open_child_care_referral_platform.providers.models import Provider
+    from open_child_care_referral_platform.referrals.models import Child
 
 register = template.Library()
 
@@ -172,4 +174,166 @@ def queue_row(referral: Referral) -> dict[str, Any]:
         ),
         "urgent": is_active and waiting_days >= _URGENT_DAYS,
         "source_label": referral.get_source_display(),
+    }
+
+
+# --- family portal home ("Family Portal" design) ---------------------------
+#
+# The family "My children" card view-model. Like ``queue_row``, this bundles a
+# child's display into one structure so the template stays a straight render of
+# the design's nested children -> referrals -> saved-providers layout. Every
+# value derives from the real Child / Referral / ReferralProvider rows the view
+# prefetches (referrals with an ``unread_coordinator_messages`` annotation, and
+# ``saved_providers__provider``), so reading them here adds no queries.
+
+# Referral status -> (pill label, pill modifier suffix). Shared by the child
+# summary pill and the per-referral header pill.
+_REFERRAL_STATUS_PILL: dict[str, tuple[str, str]] = {
+    Referral.Status.NEW: ("Getting started", "new"),
+    Referral.Status.ASSIGNED: ("In progress", "assigned"),
+    Referral.Status.IN_PROGRESS: ("In progress", "in_progress"),
+    Referral.Status.COMPLETED: ("Matched", "completed"),
+    Referral.Status.CLOSED: ("Closed", "closed"),
+}
+# Saved-provider status -> (pill label, pill modifier suffix).
+_PROVIDER_STAGE_PILL: dict[str, tuple[str, str]] = {
+    ReferralProvider.Status.SUGGESTED: ("Suggested", "suggested"),
+    ReferralProvider.Status.SHARED: ("Shared with you", "shared"),
+    ReferralProvider.Status.SELECTED: ("Your pick", "selected"),
+    ReferralProvider.Status.DECLINED: ("Passed", "declined"),
+}
+# Display order for saved providers: things to act on first, passed last.
+_PROVIDER_STAGE_RANK: dict[str, int] = {
+    ReferralProvider.Status.SHARED: 0,
+    ReferralProvider.Status.SELECTED: 1,
+    ReferralProvider.Status.SUGGESTED: 2,
+    ReferralProvider.Status.DECLINED: 3,
+}
+# Statuses a family may still respond to ("I'm interested" / "Not for us").
+_RESPONDABLE_STAGES = frozenset(
+    {ReferralProvider.Status.SUGGESTED, ReferralProvider.Status.SHARED},
+)
+# Referral statuses that count as a live search (mirrors views.ACTIVE_STATUSES).
+_FAMILY_ACTIVE_STATUSES = frozenset(
+    {Referral.Status.NEW, Referral.Status.ASSIGNED, Referral.Status.IN_PROGRESS},
+)
+_MONTHS_PER_YEAR = 12
+
+
+def _age_detail(date_of_birth: date_type | None) -> str:
+    """A human age string ("5 months old" / "3 years old"), or "" if unknown."""
+    if date_of_birth is None:
+        return ""
+    today = timezone.localdate()
+    months = (today.year - date_of_birth.year) * _MONTHS_PER_YEAR + (
+        today.month - date_of_birth.month
+    )
+    if today.day < date_of_birth.day:
+        months -= 1
+    months = max(months, 0)
+    years = months // _MONTHS_PER_YEAR
+    if years < 1:
+        return f"{months} month{'' if months == 1 else 's'} old"
+    return f"{years} year{'' if years == 1 else 's'} old"
+
+
+def _reason_from_band(age_label: str) -> str:
+    """A friendly referral reason from the child's age band ("Infant care")."""
+    if age_label == "Age not on file":
+        return "Child care"
+    return f"{age_label} care"
+
+
+def _referral_sort_key(referral: Referral) -> tuple[int, float]:
+    """Active referrals first, then most-recently opened."""
+    active = referral.status in _FAMILY_ACTIVE_STATUSES
+    return (0 if active else 1, -referral.created.timestamp())
+
+
+def _provider_vm(saved: ReferralProvider, *, referral_active: bool) -> dict[str, Any]:
+    label, modifier = _PROVIDER_STAGE_PILL.get(
+        saved.status,
+        _PROVIDER_STAGE_PILL[ReferralProvider.Status.SUGGESTED],
+    )
+    provider = saved.provider
+    return {
+        "saved_pk": saved.pk,
+        "provider_pk": provider.pk,
+        "name": str(provider),
+        "loc": (provider.address or "").strip(),
+        "county": (provider.county or "").strip(),
+        "stage_label": label,
+        "stage_class": f"fp-pill--{modifier}",
+        "note": saved.notes.strip(),
+        "passed": saved.status == ReferralProvider.Status.DECLINED,
+        "can_respond": referral_active and saved.status in _RESPONDABLE_STAGES,
+    }
+
+
+@register.filter
+def family_child_card(child: Child) -> dict[str, Any]:
+    """Display fields for one child's card on the family portal home."""
+    referrals = sorted(child.referrals.all(), key=_referral_sort_key)
+    age_label, age_icon = _age_band(child.date_of_birth)
+    multi = len(referrals) > 1
+    total_providers = 0
+    pending = 0
+
+    referral_vms: list[dict[str, Any]] = []
+    for index, referral in enumerate(referrals):
+        active = referral.status in _FAMILY_ACTIVE_STATUSES
+        saved = sorted(
+            referral.saved_providers.all(),
+            key=lambda item: _PROVIDER_STAGE_RANK.get(item.status, 9),
+        )
+        total_providers += len(saved)
+        if active:
+            pending += sum(
+                1 for item in saved if item.status == ReferralProvider.Status.SHARED
+            )
+        status_label, status_modifier = _REFERRAL_STATUS_PILL.get(
+            referral.status,
+            _REFERRAL_STATUS_PILL[Referral.Status.NEW],
+        )
+        referral_vms.append(
+            {
+                "pk": referral.pk,
+                "show_header": multi,
+                "first": index == 0,
+                "reason": _reason_from_band(age_label),
+                "date_label": f"Opened {referral.created:%b %-d, %Y}",
+                "status_label": status_label,
+                "status_class": f"fp-pill--{status_modifier}",
+                "active": active,
+                "help_requested": referral.help_requested,
+                "unread": getattr(referral, "unread_coordinator_messages", 0),
+                "empty_note": multi and not saved,
+                "providers": [
+                    _provider_vm(item, referral_active=active) for item in saved
+                ],
+            },
+        )
+
+    # The child's summary pill follows its primary (first, active-first) referral.
+    primary_status = referrals[0].status if referrals else Referral.Status.NEW
+    child_label, child_modifier = _REFERRAL_STATUS_PILL.get(
+        primary_status,
+        _REFERRAL_STATUS_PILL[Referral.Status.NEW],
+    )
+    return {
+        "pk": child.pk,
+        "name": str(child),
+        "icon": age_icon,
+        "status_label": child_label,
+        "status_class": f"fp-pill--{child_modifier}",
+        "age_label": age_label,
+        "age_detail": _age_detail(child.date_of_birth),
+        "need_label": child.get_referral_need_display(),
+        "help": any(referral.help_requested for referral in referrals),
+        "multi": multi,
+        "ref_count": len(referrals),
+        "pending": pending,
+        "pending_word": "provider is" if pending == 1 else "providers are",
+        "empty": not multi and total_providers == 0,
+        "referrals": referral_vms,
     }

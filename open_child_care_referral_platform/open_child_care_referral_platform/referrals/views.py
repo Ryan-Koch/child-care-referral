@@ -17,6 +17,7 @@ from urllib.parse import urlunsplit
 
 from django.conf import settings
 from django.contrib import messages
+from django.db import transaction
 from django.db.models import Case
 from django.db.models import Count
 from django.db.models import F
@@ -44,6 +45,7 @@ from open_child_care_referral_platform.referrals.forms import ChildForm
 from open_child_care_referral_platform.referrals.forms import MessageForm
 from open_child_care_referral_platform.referrals.forms import ReferralNotesForm
 from open_child_care_referral_platform.referrals.forms import ReferralProviderForm
+from open_child_care_referral_platform.referrals.forms import SchoolFormSet
 from open_child_care_referral_platform.referrals.models import Child
 from open_child_care_referral_platform.referrals.models import Message
 from open_child_care_referral_platform.referrals.models import Referral
@@ -656,6 +658,94 @@ def referral_ingest_view(request: HttpRequest) -> HttpResponse:
     )
 
 
+# The weekly care-schedule days, in display order. The schedule is built from
+# and rendered to the child form by hand (it isn't a single model field); the
+# stored shape is {"<weekday>": [["HH:MM", "HH:MM"]]} — one range per kept day.
+_SCHEDULE_DAYS: tuple[tuple[str, str], ...] = (
+    ("monday", "Monday"),
+    ("tuesday", "Tuesday"),
+    ("wednesday", "Wednesday"),
+    ("thursday", "Thursday"),
+    ("friday", "Friday"),
+    ("saturday", "Saturday"),
+    ("sunday", "Sunday"),
+)
+_DEFAULT_CARE_FROM = "07:30"
+_DEFAULT_CARE_TO = "17:30"
+
+
+def _parse_care_schedule(post: QueryDict) -> dict[str, list[list[str]]]:
+    """Build the stored ``care_schedule`` from the child form's day rows.
+
+    A day is kept only when its checkbox is on and both times are present; each
+    kept day stores a single ``[start, end]`` range.
+    """
+    schedule: dict[str, list[list[str]]] = {}
+    for key, _label in _SCHEDULE_DAYS:
+        if not post.get(f"sched_{key}"):
+            continue
+        start = (post.get(f"sched_{key}_from") or "").strip()
+        end = (post.get(f"sched_{key}_to") or "").strip()
+        if start and end:
+            schedule[key] = [[start, end]]
+    return schedule
+
+
+def _schedule_rows_from_schedule(schedule: dict[str, Any]) -> list[dict[str, Any]]:
+    """Child-form day rows from a stored ``care_schedule`` (or ``{}``)."""
+    rows: list[dict[str, Any]] = []
+    for key, label in _SCHEDULE_DAYS:
+        ranges = schedule.get(key) if isinstance(schedule, dict) else None
+        first = None
+        if (
+            ranges
+            and isinstance(ranges[0], (list, tuple))
+            and len(ranges[0]) == _TIME_RANGE_PARTS
+        ):
+            first = ranges[0]
+        rows.append(
+            {
+                "key": key,
+                "label": label,
+                "on": first is not None,
+                "from": first[0] if first else _DEFAULT_CARE_FROM,
+                "to": first[1] if first else _DEFAULT_CARE_TO,
+            },
+        )
+    return rows
+
+
+def _schedule_rows_from_post(post: QueryDict) -> list[dict[str, Any]]:
+    """Day rows reflecting what was just submitted (for re-render after an error)."""
+    return [
+        {
+            "key": key,
+            "label": label,
+            "on": bool(post.get(f"sched_{key}")),
+            "from": post.get(f"sched_{key}_from") or _DEFAULT_CARE_FROM,
+            "to": post.get(f"sched_{key}_to") or _DEFAULT_CARE_TO,
+        }
+        for key, label in _SCHEDULE_DAYS
+    ]
+
+
+def _render_child_form(
+    request: HttpRequest,
+    form: ChildForm,
+    formset: Any,
+    *,
+    schedule_rows: list[dict[str, Any]],
+    is_edit: bool,
+) -> HttpResponse:
+    context = {
+        "form": form,
+        "school_formset": formset,
+        "schedule_rows": schedule_rows,
+        "is_edit": is_edit,
+    }
+    return render(request, "referrals/family_child_form.html", context)
+
+
 @family_required
 def family_add_child_view(request: HttpRequest) -> HttpResponse:
     """Family adds a child, which opens a referral and lands them on its search.
@@ -664,22 +754,72 @@ def family_add_child_view(request: HttpRequest) -> HttpResponse:
     """
     if request.method == "POST":
         form = ChildForm(request.POST)
-        if form.is_valid():
-            child = form.save(commit=False)
-            child.family_id = request.user.pk
-            child.save()
-            Referral.objects.create(
-                child=child,
-                source=Referral.Source.FAMILY,
-                status=Referral.Status.NEW,
-            )
+        # Validate the schools against the (still unsaved) child, then commit
+        # child + schedule + schools together so a bad school can't half-save.
+        form.instance.family_id = request.user.pk
+        formset = SchoolFormSet(request.POST, instance=form.instance)
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                child = form.save(commit=False)
+                child.family_id = request.user.pk
+                child.care_schedule = _parse_care_schedule(request.POST)
+                child.save()
+                formset.instance = child
+                formset.save()
+                Referral.objects.create(
+                    child=child,
+                    source=Referral.Source.FAMILY,
+                    status=Referral.Status.NEW,
+                )
             messages.success(request, f"Added {child}.")
             # Land on the provider search with the picker defaulting to the new
             # child (the search is one shared view; child rides in the query).
             return redirect(reverse("referrals:family_search") + f"?child={child.pk}")
+        schedule_rows = _schedule_rows_from_post(request.POST)
     else:
         form = ChildForm()
-    return render(request, "referrals/family_add_child.html", {"form": form})
+        formset = SchoolFormSet(instance=Child())
+        schedule_rows = _schedule_rows_from_schedule({})
+    return _render_child_form(
+        request,
+        form,
+        formset,
+        schedule_rows=schedule_rows,
+        is_edit=False,
+    )
+
+
+@family_required
+def family_edit_child_view(request: HttpRequest, pk: int) -> HttpResponse:
+    """Family edits one of their own children (identity, care schedule, schools).
+
+    Scoped to the family's children, so editing another family's child is a
+    clean 404 — the same ownership discipline as the rest of the portal.
+    """
+    child = get_object_or_404(family_children(request.user), pk=pk)
+    if request.method == "POST":
+        form = ChildForm(request.POST, instance=child)
+        formset = SchoolFormSet(request.POST, instance=child)
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                child = form.save(commit=False)
+                child.care_schedule = _parse_care_schedule(request.POST)
+                child.save()
+                formset.save()
+            messages.success(request, f"Updated {child}.")
+            return redirect("referrals:my_referrals")
+        schedule_rows = _schedule_rows_from_post(request.POST)
+    else:
+        form = ChildForm(instance=child)
+        formset = SchoolFormSet(instance=child)
+        schedule_rows = _schedule_rows_from_schedule(child.care_schedule)
+    return _render_child_form(
+        request,
+        form,
+        formset,
+        schedule_rows=schedule_rows,
+        is_edit=True,
+    )
 
 
 def _posted_id(request: HttpRequest, key: str) -> int:
@@ -738,6 +878,51 @@ def family_save_provider_view(request: HttpRequest) -> HttpResponse:
     )
     messages.success(request, f"Saved {provider} for {child}.")
     return redirect(_family_save_redirect(request, child))
+
+
+# The two family-meaningful outcomes for a saved provider, keyed by the POST
+# value the "I'm interested" / "Not for us" buttons send.
+_FAMILY_PROVIDER_RESPONSES = {
+    "interested": ReferralProvider.Status.SELECTED,
+    "pass": ReferralProvider.Status.DECLINED,
+}
+
+
+@require_POST
+@family_required
+def family_provider_respond_view(request: HttpRequest, pk: int) -> HttpResponse:
+    """Family expresses interest in (or passes on) a saved provider (Goal #2).
+
+    The coordinator side already has this via ``referral_provider_update_view``;
+    this is the family equivalent, restricted to the two family-meaningful
+    outcomes and scoped to the family's own referrals (a cross-family pk is a
+    clean 404, the same ownership discipline as the rest of the portal).
+    """
+    saved = get_object_or_404(
+        ReferralProvider.objects.select_related("provider").filter(
+            referral__child__family=request.user,
+        ),
+        pk=pk,
+    )
+    status = _FAMILY_PROVIDER_RESPONSES.get(request.POST.get("response", ""))
+    if status is None:
+        messages.error(request, "That response is not recognized.")
+    elif status == ReferralProvider.Status.SELECTED:
+        saved.status = status
+        saved.save(update_fields=["status", "modified"])
+        messages.success(
+            request,
+            f"Great — we've let your coordinator know you're interested in "
+            f"{saved.provider}.",
+        )
+    else:
+        saved.status = status
+        saved.save(update_fields=["status", "modified"])
+        messages.success(
+            request,
+            f"Thanks — we'll keep looking beyond {saved.provider}.",
+        )
+    return redirect("referrals:my_referrals")
 
 
 @require_POST

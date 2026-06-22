@@ -1,11 +1,6 @@
 /*
  * Compass theme for the coordinator referral queue.
  *
- * Ported from the "Referral Queue" design (claude.ai/design). Scoped under
- * `.compass-queue` so it only affects this page and never leaks into the rest of
- * the Bootstrap UI. Same cream/teal palette + Public Sans / Source Serif 4 type
- * as compass_search.css; the data it renders is the real Referral model. The
- * global Compass top bar (compass_header.css) supplies the page chrome above.
  */
 
 .compass-queue {

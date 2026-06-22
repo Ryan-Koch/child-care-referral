@@ -1,12 +1,6 @@
 /*
  * Compass theme for the provider DETAIL page.
  *
- * Ported from the "Provider Detail" design (claude.ai/design). Loaded alongside
- * compass_search.css, which already defines the palette tokens on `.compass` and
- * the shared `.compass-btn` / `.compass-pill` / `.compass-breadcrumb` components;
- * this file only adds the detail-only pieces (hero, at-a-glance, tabs, the four
- * panels, and the sidebar), all prefixed `cd-`. Everything is scoped under
- * `.compass-detail` so it never leaks into the search pages or the Bootstrap UI.
  */
 
 .compass-detail {

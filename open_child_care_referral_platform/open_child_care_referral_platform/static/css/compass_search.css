@@ -1,11 +1,6 @@
 /*
  * Compass theme for the provider search surfaces.
  *
- * Ported from the "Provider Search" design (claude.ai/design). Every rule is
- * scoped under `.compass` so it only affects the search pages that opt in and
- * never leaks into the rest of the Bootstrap UI. The cream/teal palette, the
- * Public Sans + Source Serif 4 type, and the card/pill/chip shapes come from the
- * design; the data they render is the real Provider model.
  */
 
 .compass {

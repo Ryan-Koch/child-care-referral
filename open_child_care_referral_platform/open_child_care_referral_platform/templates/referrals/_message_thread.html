@@ -1,34 +1,36 @@
 {% comment %}
-  Renders a referral message thread. Expects `thread` (ordered messages, each
-  with `sender` selected) and `referral` (with `child.family` loaded) in context.
-  A message is family-sent when its sender is the referral's child's family.
+  Renders a referral message thread for the family portal. Expects `thread`
+  (ordered messages, each with `sender` selected) and `referral` (with
+  `child.family` loaded) in context. A message is family-sent — and so shown as
+  "mine" (right-aligned, teal) — when its sender is the referral's child's
+  family; everything else is the coordinator side.
 {% endcomment %}
-<div class="d-flex flex-column gap-3">
-  {% for message in thread %}
-    {% if message.sender_id == referral.child.family_id %}
-      <div class="border rounded p-2 bg-light">
-        <div class="d-flex justify-content-between small">
-          <span class="fw-semibold">
-            {{ message.sender.name|default:message.sender.email|default:"Family" }}
-            <span class="badge text-bg-secondary ms-1">Family</span>
-          </span>
-          <span class="text-muted">{{ message.created|date:"Y-m-d H:i" }}</span>
+{% load referral_extras %}
+
+{% for message in thread %}
+  {% if message.sender_id == referral.child.family_id %}
+    <div class="fp-msg fp-msg--mine">
+      <span class="fp-msg__avatar">{{ message.sender.name|default:message.sender.email|default:"You"|initials }}</span>
+      <div class="fp-msg__col">
+        <div class="fp-msg__meta">
+          <span class="fp-msg__author">{{ message.sender.name|default:message.sender.email|default:"You" }}</span>
+          <span class="fp-msg__time">{{ message.created|date:"M j, g:i A" }}</span>
         </div>
-        <div class="mt-1">{{ message.body|linebreaksbr }}</div>
+        <div class="fp-bubble">{{ message.body|linebreaksbr }}</div>
       </div>
-    {% else %}
-      <div class="border rounded p-2">
-        <div class="d-flex justify-content-between small">
-          <span class="fw-semibold">
-            {{ message.sender.name|default:message.sender.email|default:"Coordinator" }}
-            <span class="badge text-bg-primary ms-1">Coordinator</span>
-          </span>
-          <span class="text-muted">{{ message.created|date:"Y-m-d H:i" }}</span>
+    </div>
+  {% else %}
+    <div class="fp-msg">
+      <span class="fp-msg__avatar">{{ message.sender.name|default:message.sender.email|default:"Coordinator"|initials }}</span>
+      <div class="fp-msg__col">
+        <div class="fp-msg__meta">
+          <span class="fp-msg__author">{{ message.sender.name|default:message.sender.email|default:"Coordinator" }}</span>
+          <span class="fp-msg__time">{{ message.created|date:"M j, g:i A" }}</span>
         </div>
-        <div class="mt-1">{{ message.body|linebreaksbr }}</div>
+        <div class="fp-bubble">{{ message.body|linebreaksbr }}</div>
       </div>
-    {% endif %}
-  {% empty %}
-    <p class="text-muted mb-0">No messages yet. Start the conversation below.</p>
-  {% endfor %}
-</div>
+    </div>
+  {% endif %}
+{% empty %}
+  <div class="fp-thread__empty">No messages yet. Start the conversation below.</div>
+{% endfor %}

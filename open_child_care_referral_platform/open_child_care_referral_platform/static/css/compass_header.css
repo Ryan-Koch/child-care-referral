@@ -1,10 +1,14 @@
 /*
  * Compass-styled global top bar.
  *
- * Loaded site-wide from base.html so the header matches the Compass provider
- * search. Scoped under .compass-topbar; it re-skins the Bootstrap navbar
- * (kept for its responsive collapse) without changing the rest of the page.
  */
+
+/* Warm Compass cream behind every page — the full-bleed background the family
+ * portal and the coordinator surfaces both sit on. */
+body {
+  background-color: #faf7f2;
+}
+
 .compass-topbar {
   --cmp-teal: #1f6e68;
   --cmp-teal-deep: #22443f;

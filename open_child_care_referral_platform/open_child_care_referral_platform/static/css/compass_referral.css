@@ -1,12 +1,6 @@
 /*
  * Compass theme for the coordinator REFERRAL DETAIL page.
  *
- * Ported from the "Referral Detail" design (claude.ai/design). Loaded alongside
- * compass_search.css, which defines the palette tokens on `.compass` and the
- * shared `.compass-btn` / `.compass-select` / `.compass-breadcrumb` components;
- * this file only adds the referral-detail pieces (title bar, the stacked cards,
- * saved-provider rows, message thread, and the sidebar), all prefixed `rd-` and
- * scoped under `.compass-referral` so nothing leaks into the other pages.
  */
 
 .compass-referral {
