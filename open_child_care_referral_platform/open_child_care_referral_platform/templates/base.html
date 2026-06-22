@@ -101,20 +101,25 @@
                   </li>
                 {% endif %}
                 {% if is_family %}
+                  {% url 'referrals:my_referrals' as url_my_referrals %}
+                  <li class="nav-item">
+                    <a class="nav-link compass-navlink {% if request.path == url_my_referrals %}is-active{% endif %}"
+                       href="{{ url_my_referrals }}">
+                      My children
+                      {% if unread_message_count %}
+                        <span class="compass-badge">{{ unread_message_count }}</span>
+                      {% endif %}
+                    </a>
+                  </li>
                   {% url 'referrals:family_search' as url_family_search %}
                   <li class="nav-item">
                     <a class="nav-link compass-navlink {% if request.path == url_family_search %}is-active{% endif %}"
                        href="{{ url_family_search }}">Find providers</a>
                   </li>
-                  {% url 'referrals:my_referrals' as url_my_referrals %}
+                  {% url 'users:update' as url_my_info %}
                   <li class="nav-item">
-                    <a class="nav-link compass-navlink {% if request.path == url_my_referrals %}is-active{% endif %}"
-                       href="{{ url_my_referrals }}">
-                      My providers
-                      {% if unread_message_count %}
-                        <span class="compass-badge">{{ unread_message_count }}</span>
-                      {% endif %}
-                    </a>
+                    <a class="nav-link compass-navlink {% if request.path == url_my_info %}is-active{% endif %}"
+                       href="{{ url_my_info }}">My information</a>
                   </li>
                 {% endif %}
               </ul>

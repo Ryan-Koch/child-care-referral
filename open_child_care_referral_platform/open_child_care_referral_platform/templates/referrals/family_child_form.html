@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% load static %}
+
+{% block title %}
+  {% if is_edit %}
+    Edit your child
+  {% else %}
+    Add a child
+  {% endif %}
+{% endblock title %}
+{% block bodyclass %}fp-body{% endblock bodyclass %}
+{% block css %}
+  {{ block.super }}
+  <link href="{% static 'css/compass_family.css' %}" rel="stylesheet" />
+{% endblock css %}
+{% block javascript %}
+  {{ block.super }}
+  <script defer src="{% static 'js/compass_family.js' %}"></script>
+{% endblock javascript %}
+{% block content %}
+  <div class="fp">
+    <div class="fp-wrap fp-wrap--narrow">
+      <div class="fp-crumb">
+        <a href="{% url 'referrals:my_referrals' %}"><i class="bi bi-arrow-left"></i> Your children</a>
+        <i class="bi bi-chevron-right fp-crumb__sep"></i>
+        <span class="fp-crumb__here">
+          {% if is_edit %}
+            Edit child
+          {% else %}
+            Add a child
+          {% endif %}
+        </span>
+      </div>
+      {% if is_edit %}
+        <h1 class="fp-title fp-title--sm">Edit your child's details</h1>
+        <p class="fp-lede">Update anything that's changed — your coordinator sees these details.</p>
+      {% else %}
+        <h1 class="fp-title fp-title--sm">Add a child</h1>
+        <p class="fp-lede">
+          Tell us about your child to get started. We'll open a referral for
+          them and take you straight to the provider search.
+        </p>
+      {% endif %}
+      <form method="post"
+            action="{% if is_edit %}{% url 'referrals:family_edit_child' form.instance.pk %}{% else %}{% url 'referrals:family_add_child' %}{% endif %}">
+        {% csrf_token %}
+        <!-- ABOUT -->
+        <div class="fp-formcard">
+          <div class="fp-section">
+            <i class="bi bi-person-badge"></i><span class="fp-section__label">About your child</span>
+          </div>
+          <div class="fp-fields">
+            <div class="fp-row">
+              <div class="fp-field">
+                <label class="fp-label" for="{{ form.first_name.id_for_label }}">
+                  First name <span class="fp-label__req">*</span>
+                </label>
+                {{ form.first_name }}
+                {% for error in form.first_name.errors %}
+                  <div class="fp-err">
+                    <i class="bi bi-exclamation-circle"></i>{{ error }}
+                  </div>
+                {% endfor %}
+              </div>
+              <div class="fp-field">
+                <label class="fp-label" for="{{ form.last_name.id_for_label }}">Last name</label>
+                {{ form.last_name }}
+              </div>
+            </div>
+            <div class="fp-row">
+              <div class="fp-field">
+                <label class="fp-label" for="{{ form.date_of_birth.id_for_label }}">Date of birth</label>
+                {{ form.date_of_birth }}
+                {% for error in form.date_of_birth.errors %}
+                  <div class="fp-err">
+                    <i class="bi bi-exclamation-circle"></i>{{ error }}
+                  </div>
+                {% endfor %}
+                <div class="fp-hint">Helps us match age-appropriate openings.</div>
+              </div>
+              <div class="fp-field">
+                <label class="fp-label" for="{{ form.relationship.id_for_label }}">
+                  Relationship <span class="fp-label__req">*</span>
+                </label>
+                {{ form.relationship }}
+              </div>
+            </div>
+            <div class="fp-field">
+              <label class="fp-label" for="{{ form.referral_need.id_for_label }}">
+                What kind of help do you need? <span class="fp-label__req">*</span>
+              </label>
+              {{ form.referral_need }}
+            </div>
+            <label class="fp-checkcard">
+              {{ form.in_school }}
+              <span class="fp-checkbox"><i class="bi bi-check-lg"></i></span>
+              <div>
+                <div class="fp-checkcard__title">Currently in school</div>
+                <div class="fp-checkcard__hint">Check this if your child is already enrolled somewhere.</div>
+              </div>
+            </label>
+          </div>
+        </div>
+        <!-- CARE SCHEDULE -->
+        <div class="fp-formcard">
+          <div class="fp-section">
+            <i class="bi bi-calendar-week"></i><span class="fp-section__label">Care schedule</span>
+          </div>
+          <p class="fp-section__hint">Pick the days and hours you need care. Leave a day off if you don't.</p>
+          <div class="fp-days">
+            {% for d in schedule_rows %}
+              <div class="fp-day">
+                <label class="fp-day__toggle">
+                  <input type="checkbox"
+                         class="fp-cb"
+                         name="sched_{{ d.key }}"
+                         {% if d.on %}checked{% endif %} />
+                  <span class="fp-checkbox"><i class="bi bi-check-lg"></i></span>
+                  <span class="fp-day__label">{{ d.label }}</span>
+                </label>
+                <div class="fp-day__times">
+                  <div class="fp-day__inputs">
+                    <input type="time"
+                           class="fp-time"
+                           name="sched_{{ d.key }}_from"
+                           value="{{ d.from }}" />
+                    <span class="fp-time__sep">to</span>
+                    <input type="time"
+                           class="fp-time"
+                           name="sched_{{ d.key }}_to"
+                           value="{{ d.to }}" />
+                  </div>
+                  <span class="fp-day__off">No care needed</span>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+        <!-- SCHOOLS -->
+        <div class="fp-formcard">
+          <div class="fp-section">
+            <i class="bi bi-mortarboard"></i><span class="fp-section__label">Schools</span>
+          </div>
+          <p class="fp-section__hint">
+            Add any school your child currently attends. This helps us coordinate
+            around the school year.
+          </p>
+          {{ school_formset.management_form }}
+          {% for error in school_formset.non_form_errors %}
+            <div class="fp-err">
+              <i class="bi bi-exclamation-circle"></i>{{ error }}
+            </div>
+          {% endfor %}
+          <div class="fp-schools" id="fp-schools">
+            {% for sform in school_formset %}
+              <div class="fp-school"
+                   {% if not sform.instance.pk and not sform.errors %}hidden{% endif %}>
+                {{ sform.id }}
+                <div class="fp-dnone">{{ sform.DELETE }}</div>
+                <div class="fp-school__head">
+                  <span class="fp-school__num">School {{ forloop.counter }}</span>
+                  <button type="button" class="fp-school__remove">
+                    <i class="bi bi-trash3"></i>Remove
+                  </button>
+                </div>
+                <div class="fp-school__fields">
+                  <div class="fp-field">
+                    <label class="fp-label" for="{{ sform.institution_name.id_for_label }}">School name</label>
+                    {{ sform.institution_name }}
+                  </div>
+                  <div class="fp-row">
+                    <div class="fp-field">
+                      <label class="fp-label" for="{{ sform.city.id_for_label }}">City</label>
+                      {{ sform.city }}
+                    </div>
+                    <div class="fp-field">
+                      <label class="fp-label" for="{{ sform.state.id_for_label }}">State</label>
+                      {{ sform.state }}
+                    </div>
+                    <div class="fp-field">
+                      <label class="fp-label" for="{{ sform.grade_level.id_for_label }}">Grade</label>
+                      {{ sform.grade_level }}
+                    </div>
+                  </div>
+                  <div class="fp-row">
+                    <div class="fp-field">
+                      <label class="fp-label" for="{{ sform.school_year_start.id_for_label }}">School year starts</label>
+                      {{ sform.school_year_start }}
+                    </div>
+                    <div class="fp-field">
+                      <label class="fp-label" for="{{ sform.school_year_end.id_for_label }}">School year ends</label>
+                      {{ sform.school_year_end }}
+                    </div>
+                  </div>
+                  {% for field in sform.visible_fields %}
+                    {% for error in field.errors %}
+                      <div class="fp-err">
+                        <i class="bi bi-exclamation-circle"></i>{{ field.label }}: {{ error }}
+                      </div>
+                    {% endfor %}
+                  {% endfor %}
+                </div>
+              </div>
+            {% endfor %}
+            <div class="fp-noschools"
+                 id="fp-noschools"
+                 {% if school_formset.initial_form_count %}hidden{% endif %}>No schools added yet.</div>
+            <button type="button" class="fp-addbtn" id="fp-add-school">
+              <i class="bi bi-plus-lg"></i>Add a school
+            </button>
+          </div>
+        </div>
+        <!-- ACTIONS -->
+        <div class="fp-actions">
+          <button type="submit" class="fp-btn fp-btn--primary">
+            {% if is_edit %}
+              <i class="bi bi-check-lg"></i>Save changes
+            {% else %}
+              <i class="bi bi-plus-lg"></i>Add child &amp; find providers
+            {% endif %}
+          </button>
+          <a href="{% url 'referrals:my_referrals' %}" class="fp-btn fp-btn--ghost">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock content %}

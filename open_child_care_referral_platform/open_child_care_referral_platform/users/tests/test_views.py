@@ -105,3 +105,35 @@ class TestUserDetailView:
         assert isinstance(response, HttpResponseRedirect)
         assert response.status_code == HTTPStatus.FOUND
         assert response.url == f"{login_url}?next=/fake-url/"
+
+
+@pytest.mark.django_db
+def test_user_update_saves_name_and_phone(client) -> None:
+    user = UserFactory.create()
+    client.force_login(user)
+
+    response = client.post(
+        reverse("users:update"),
+        {"name": "New Name", "phone": "614-555-0142"},
+    )
+
+    assert response.status_code == HTTPStatus.FOUND
+    user.refresh_from_db()
+    assert user.name == "New Name"
+    assert user.phone == "614-555-0142"
+
+
+@pytest.mark.django_db
+def test_user_update_requires_name(client) -> None:
+    user = UserFactory.create(name="Original")
+    client.force_login(user)
+
+    response = client.post(
+        reverse("users:update"),
+        {"name": "", "phone": "614-555-0142"},
+    )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.context["form"].errors
+    user.refresh_from_db()
+    assert user.name == "Original"

@@ -10,6 +10,7 @@ from django.views.generic import DetailView
 from django.views.generic import RedirectView
 from django.views.generic import UpdateView
 
+from open_child_care_referral_platform.users.forms import UserInfoForm
 from open_child_care_referral_platform.users.models import User
 
 if TYPE_CHECKING:
@@ -27,7 +28,7 @@ user_detail_view = UserDetailView.as_view()
 
 class UserUpdateView(LoginRequiredMixin, SuccessMessageMixin, UpdateView):
     model = User
-    fields = ["name"]
+    form_class = UserInfoForm
     success_message = _("Information successfully updated")
 
     def get_success_url(self) -> str:

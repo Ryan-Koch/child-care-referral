@@ -1,72 +1,199 @@
 {% extends "base.html" %}
 
+{% load static %}
+{% load referral_extras %}
+
 {% block title %}
-  Your saved providers
+  Your children
 {% endblock title %}
+{% block bodyclass %}fp-body{% endblock bodyclass %}
+{% block css %}
+  {{ block.super }}
+  <link href="{% static 'css/compass_family.css' %}" rel="stylesheet" />
+{% endblock css %}
 {% block content %}
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">Your children &amp; saved providers</h1>
-    <div class="d-flex gap-2">
-      <a href="{% url 'referrals:family_add_child' %}"
-         class="btn btn-sm btn-primary">Add a child</a>
-      <a href="{% url 'referrals:portal' %}"
-         class="btn btn-sm btn-outline-secondary">Portal home</a>
+  <div class="fp">
+    <div class="fp-wrap">
+      <div class="fp-head">
+        <div>
+          <h1 class="fp-title">Your children &amp; saved providers</h1>
+          <p class="fp-lede">
+            Here's what your coordinator has shared, and where each search
+            stands. Tap a provider to say you're interested.
+          </p>
+        </div>
+        <a href="{% url 'referrals:family_add_child' %}"
+           class="fp-btn fp-btn--primary">
+          <i class="bi bi-plus-lg"></i>Add a child
+        </a>
+      </div>
+      {% if children %}
+        <div class="fp-children">
+          {% for child in children %}
+            {% with c=child|family_child_card %}
+              <div class="fp-card">
+                <div class="fp-childhead">
+                  <div class="fp-childicon">
+                    <i class="{{ c.icon }}"></i>
+                  </div>
+                  <div class="fp-childhead__id">
+                    <div class="fp-childname-row">
+                      <span class="fp-childname">{{ c.name }}</span>
+                      <span class="fp-pill {{ c.status_class }}">
+                        <span class="fp-pill__dot"></span>{{ c.status_label }}
+                      </span>
+                      {% if c.multi %}
+                        <span class="fp-tag"><i class="bi bi-clock-history"></i>{{ c.ref_count }} referrals</span>
+                      {% endif %}
+                      {% if c.help %}
+                        <span class="fp-tag fp-tag--help"><i class="bi bi-life-preserver"></i>Help requested</span>
+                      {% endif %}
+                    </div>
+                    <div class="fp-childmeta">
+                      {{ c.age_label }}
+                      {% if c.age_detail %}· {{ c.age_detail }}{% endif %}
+                      · {{ c.need_label }}
+                    </div>
+                  </div>
+                  <div class="fp-childactions">
+                    <a href="{% url 'referrals:family_edit_child' c.pk %}"
+                       class="fp-btn fp-btn--sm fp-btn--soft">
+                      <i class="bi bi-pencil"></i>Edit
+                    </a>
+                    <a href="{% url 'referrals:family_search' %}?child={{ c.pk }}"
+                       class="fp-btn fp-btn--sm fp-btn--teal">
+                      <i class="bi bi-search"></i>Find providers
+                    </a>
+                  </div>
+                </div>
+                {% if c.pending %}
+                  <div class="fp-pending">
+                    <i class="bi bi-hand-index-thumb"></i>
+                    <span><b>{{ c.pending }}</b> {{ c.pending_word }} waiting for your response below.</span>
+                  </div>
+                {% endif %}
+                <div class="fp-refs">
+                  {% if c.empty %}
+                    <div class="fp-childempty">
+                      <i class="bi bi-compass"></i>
+                      <div class="fp-childempty__title">Your search is just getting started</div>
+                      <div class="fp-childempty__hint">Your coordinator will share matching providers here soon.</div>
+                    </div>
+                  {% endif %}
+                  {% for ref in c.referrals %}
+                    {% if ref.show_header %}
+                      <div class="fp-refhead {% if ref.first %}fp-refhead--first{% else %}fp-refhead--gap{% endif %}">
+                        {% if ref.active %}
+                          <i class="bi bi-clipboard2-pulse fp-refhead__icon"></i>
+                        {% else %}
+                          <i class="bi bi-clipboard2-check fp-refhead__icon fp-refhead__icon--muted"></i>
+                        {% endif %}
+                        <span class="fp-refhead__reason">{{ ref.reason }}</span>
+                        <span class="fp-refhead__dot">·</span>
+                        <span class="fp-refhead__date">{{ ref.date_label }}</span>
+                        <span class="fp-refhead__pill fp-pill fp-pill--sm {{ ref.status_class }}">
+                          <span class="fp-pill__dot"></span>{{ ref.status_label }}
+                        </span>
+                      </div>
+                    {% endif %}
+                    {% for p in ref.providers %}
+                      <div class="fp-prov{% if p.passed %} fp-prov--passed{% endif %}">
+                        <div class="fp-prov__icon">
+                          <i class="bi bi-building"></i>
+                        </div>
+                        <div class="fp-prov__body">
+                          <div class="fp-prov__titlerow">
+                            <a href="{% url 'providers:detail' p.provider_pk %}"
+                               class="fp-prov__name">{{ p.name }}</a>
+                            <span class="fp-pill fp-pill--sm {{ p.stage_class }}">
+                              <span class="fp-pill__dot"></span>{{ p.stage_label }}
+                            </span>
+                          </div>
+                          {% if p.loc or p.county %}
+                            <div class="fp-prov__meta">
+                              <i class="bi bi-geo-alt-fill"></i>
+                              {% if p.loc %}
+                                {{ p.loc|truncatechars:48 }}
+                                {% if p.county %}<span class="fp-prov__sep">·</span>{{ p.county }} County{% endif %}
+                              {% else %}
+                                {{ p.county }} County
+                              {% endif %}
+                            </div>
+                          {% endif %}
+                          {% if p.note %}
+                            <div class="fp-note fp-note--coord">
+                              <i class="bi bi-chat-quote-fill fp-note__icon"></i>
+                              <div class="fp-note__text">
+                                <span class="fp-note__label">Your coordinator:</span> {{ p.note }}
+                              </div>
+                            </div>
+                          {% endif %}
+                          {% if p.can_respond %}
+                            <div class="fp-respond">
+                              <form method="post"
+                                    action="{% url 'referrals:provider_respond' p.saved_pk %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="response" value="interested" />
+                                <button type="submit" class="fp-btn fp-btn--xs fp-btn--primary">
+                                  <i class="bi bi-hand-thumbs-up"></i>I'm interested
+                                </button>
+                              </form>
+                              <form method="post"
+                                    action="{% url 'referrals:provider_respond' p.saved_pk %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="response" value="pass" />
+                                <button type="submit" class="fp-btn fp-btn--xs fp-btn--soft fp-btn--danger">Not for us</button>
+                              </form>
+                            </div>
+                          {% endif %}
+                        </div>
+                      </div>
+                    {% endfor %}
+                    {% if ref.empty_note %}
+                      <div class="fp-refempty">
+                        <i class="bi bi-hourglass-split"></i>No providers shared for this referral yet.
+                      </div>
+                    {% endif %}
+                    <div class="fp-refactions">
+                      <a href="{% url 'referrals:family_messages' ref.pk %}"
+                         class="fp-btn fp-btn--sm fp-btn--soft">
+                        <i class="bi bi-chat-left-text"></i>Messages
+                        {% if ref.unread %}
+                          <span class="fp-btn__dot"></span>
+                        {% endif %}
+                      </a>
+                      {% if ref.help_requested %}
+                        <span class="fp-tag fp-tag--help"><i class="bi bi-life-preserver"></i>Help requested</span>
+                      {% else %}
+                        <form method="post" action="{% url 'referrals:request_help' ref.pk %}">
+                          {% csrf_token %}
+                          <button type="submit" class="fp-btn fp-btn--sm fp-btn--soft">
+                            <i class="bi bi-life-preserver"></i>Request coordinator help
+                          </button>
+                        </form>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endwith %}
+          {% endfor %}
+        </div>
+        <div class="fp-foot">
+          Need a hand? Your coordinator is here to help — use
+          <b>Messages</b> on any referral to start a conversation.
+        </div>
+      {% else %}
+        <div class="fp-empty">
+          <i class="bi bi-compass"></i>
+          <div class="fp-empty__title">No children on file yet</div>
+          <div class="fp-empty__hint">Add a child to start finding and saving child care.</div>
+          <a href="{% url 'referrals:family_add_child' %}"
+             class="fp-btn fp-btn--primary">
+            <i class="bi bi-plus-lg"></i>Add a child
+          </a>
+        </div>
+      {% endif %}
     </div>
   </div>
-  {% for child in children %}
-    <div class="card shadow-sm mb-4">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span class="fw-semibold">{{ child }}</span>
-        <a href="{% url 'referrals:family_search' %}?child={{ child.pk }}"
-           class="btn btn-sm btn-primary">Find providers</a>
-      </div>
-      <div class="card-body">
-        {% for referral in child.referrals.all %}
-          <div class="mb-3">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div>
-                <span class="badge text-bg-secondary">{{ referral.get_status_display }}</span>
-                <a href="{% url 'referrals:family_messages' referral.pk %}"
-                   class="btn btn-sm btn-outline-secondary ms-1">
-                  Messages
-                  {% if referral.unread_coordinator_messages %}
-                    <span class="badge text-bg-danger">{{ referral.unread_coordinator_messages }}</span>
-                  {% endif %}
-                </a>
-              </div>
-              {% if referral.help_requested %}
-                <span class="badge text-bg-warning">Help requested</span>
-              {% else %}
-                <form method="post" action="{% url 'referrals:request_help' referral.pk %}">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-sm btn-outline-primary">Request coordinator help</button>
-                </form>
-              {% endif %}
-            </div>
-            <ul class="list-unstyled mb-0">
-              {% for saved in referral.saved_providers.all %}
-                <li class="mb-2">
-                  <a href="{% url 'providers:detail' saved.provider.pk %}">{{ saved.provider }}</a>
-                  <span class="badge text-bg-light text-muted ms-1">{{ saved.get_status_display }}</span>
-                  {% if saved.notes %}
-                    <div class="text-muted small">{{ saved.notes }}</div>
-                  {% endif %}
-                </li>
-              {% empty %}
-                <li class="text-muted">No providers saved on this referral yet.</li>
-              {% endfor %}
-            </ul>
-          </div>
-        {% empty %}
-          <p class="text-muted mb-0">No referral yet — use "Find providers" to start saving.</p>
-        {% endfor %}
-      </div>
-    </div>
-  {% empty %}
-    <div class="alert alert-info" role="alert">
-      No children are on file for your account yet.
-      <a href="{% url 'referrals:family_add_child' %}" class="alert-link">Add a child</a>
-      to get started.
-    </div>
-  {% endfor %}
 {% endblock content %}

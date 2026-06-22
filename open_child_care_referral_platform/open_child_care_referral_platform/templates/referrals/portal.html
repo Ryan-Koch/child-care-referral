@@ -1,21 +1,33 @@
 {% extends "base.html" %}
 
+{% load static %}
+
 {% block title %}
   Your portal
 {% endblock title %}
+{% block bodyclass %}fp-body{% endblock bodyclass %}
+{% block css %}
+  {{ block.super }}
+  <link href="{% static 'css/compass_family.css' %}" rel="stylesheet" />
+{% endblock css %}
 {% block content %}
-  <div class="py-4">
-    <h1 class="h3 mb-3">Welcome to your portal</h1>
-    <p class="text-muted">
-      This is your family portal. See the providers saved for your family and
-      search the catalog for more.
-    </p>
-    <div class="d-flex gap-2">
-      <a href="{% url 'referrals:my_referrals' %}" class="btn btn-primary">View your saved providers</a>
-      <a href="{% url 'referrals:family_search' %}"
-         class="btn btn-outline-primary">Search providers</a>
-      <a href="{% url 'referrals:family_add_child' %}"
-         class="btn btn-outline-primary">Add a child</a>
+  <div class="fp">
+    <div class="fp-wrap fp-wrap--narrow">
+      <h1 class="fp-title">Welcome to your family portal</h1>
+      <p class="fp-lede">
+        See the providers your coordinator has shared, tell them which ones
+        you're interested in, and search the catalog for more.
+      </p>
+      <div class="fp-actions">
+        <a href="{% url 'referrals:my_referrals' %}"
+           class="fp-btn fp-btn--primary">
+          <i class="bi bi-people"></i>View my children
+        </a>
+        <a href="{% url 'referrals:family_search' %}"
+           class="fp-btn fp-btn--ghost">
+          <i class="bi bi-search"></i>Find providers
+        </a>
+      </div>
     </div>
   </div>
 {% endblock content %}
