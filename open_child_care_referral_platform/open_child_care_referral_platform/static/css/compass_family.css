@@ -2,12 +2,6 @@
  * Compass theme for the family portal surfaces (home / messages / my
  * information / child form).
  *
- * Ported from the "Family Portal" design (claude.ai/design). Self-contained:
- * every rule is scoped under `.fp` (the page wrapper) so it never leaks into the
- * rest of the Bootstrap UI, and the design tokens are declared here rather than
- * inherited from compass_search.css. The warm cream/teal palette, the Public
- * Sans + Source Serif 4 type, and the card/pill shapes come from the design; the
- * data they render is the real Child / Referral / ReferralProvider models.
  */
 
 /* The cream page background is set site-wide in compass_header.css (the .fp

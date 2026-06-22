@@ -1,9 +1,6 @@
 /*
  * Compass-styled global top bar.
  *
- * Loaded site-wide from base.html so the header matches the Compass provider
- * search. Scoped under .compass-topbar; it re-skins the Bootstrap navbar
- * (kept for its responsive collapse) without changing the rest of the page.
  */
 
 /* Warm Compass cream behind every page — the full-bleed background the family
